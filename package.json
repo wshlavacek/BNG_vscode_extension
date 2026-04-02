@@ -145,7 +145,7 @@
         "menus": {
             "editor/title": [
                 {
-                    "when": "resourceLangId == bngl || resourceExtname == .gdat || resourceExtname == .cdat || resourceExtname == .scan || resourceExtname == .graphml",
+                    "when": "resourceLangId == bngl || resourceExtname == .gdat || resourceExtname == .cdat || resourceExtname == .scan || resourceExtname == .graphml || activeWebviewPanelId == plot",
                     "group": "navigation",
                     "command": "bng.menu"
                 }
