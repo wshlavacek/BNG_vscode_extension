@@ -2,12 +2,12 @@
 
 # BioNetGen (BNG) VS Code Extension
 
-A [VS Code](https://code.visualstudio.com/) extension for the [BioNetGen](http://bionetgen.org/) rule-based modeling platform. Write, validate, simulate, and visualize BioNetGen models without leaving the editor.
+A [VS Code](https://code.visualstudio.com/) extension for the [BioNetGen](http://bionetgen.org/) rule-based modeling platform. Write, validate, simulate, and visualize BioNetGen models without leaving the editor. See the [starter guide](docs/guide.md) for an introduction.
 
 ## Features
 
 * **Syntax Highlighting:** Scoping for all BNGL constructs, with dark, light, and high-contrast themes.
-* **Language Server:** Real-time diagnostics (mismatched blocks, duplicate definitions, unused parameters), autocomplete for block types, actions, parameters, molecule types, and built-in functions, go-to-definition, find references, and hover information.
+* **Language Server:** Real-time diagnostics (mismatched blocks, duplicate definitions, unused parameters), autocomplete for block types, actions, parameters, molecule types, and [built-in functions](docs/bngl-grammar.md#built-in-functions), go-to-definition, find references, and hover information.
 * **Intelligent Folding:** Fold `begin/end` blocks and metadata sections.
 * **Simulation:** Run BioNetGen simulations directly from the editor and monitor processes in a sidebar tree view.
 * **Network Visualization:** Generate contact maps, rule visualizations, and regulatory graphs.
@@ -134,3 +134,12 @@ npm run watch   # start build in watch mode
 ```
 
 Please submit issues and feature requests at [GitHub](https://github.com/wshlavacek/BNG_vscode_extension/issues).
+
+## Resources
+
+* [Starter guide](docs/guide.md)
+* [Installation guide](docs/install.md)
+* [BNGL grammar reference](docs/bngl-grammar.md)
+* [Example models](examples/)
+* [Developer guide](docs/source/developers.rst)
+* [ReadTheDocs](https://bng-vs-code-extension.readthedocs.io/en/latest/)
