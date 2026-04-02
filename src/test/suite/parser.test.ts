@@ -967,7 +967,7 @@ suite('BNGL Parser', () => {
 
     suite('parseBnglDocument — real BNGL model file', () => {
         test('parses Gardner2000 model without errors', () => {
-            const modelPath = path.resolve(__dirname, '../../../../Code/BNGL_library/bngl_models/Gardner2000.bngl');
+            const modelPath = path.resolve(__dirname, '../../../examples/Gardner2000.bngl');
             if (!fs.existsSync(modelPath)) {
                 // Skip if model file not available (CI environments)
                 return;
@@ -990,7 +990,7 @@ suite('BNGL Parser', () => {
         });
 
         test('parses Kholodenko2000 model without errors', () => {
-            const modelPath = path.resolve(__dirname, '../../../../Code/BNGL_library/bngl_models/Kholodenko2000.bngl');
+            const modelPath = path.resolve(__dirname, '../../../examples/Kholodenko2000.bngl');
             if (!fs.existsSync(modelPath)) {
                 return;
             }
