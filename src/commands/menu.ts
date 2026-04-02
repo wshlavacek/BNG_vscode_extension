@@ -6,8 +6,7 @@ interface BngMenuItem extends vscode.QuickPickItem {
 
 export async function menuCommandHandler() {
     const editor = vscode.window.activeTextEditor;
-    if (!editor) return;
-    const ext = editor.document.fileName.split('.').pop()?.toLowerCase();
+    const ext = editor?.document.fileName.split('.').pop()?.toLowerCase();
 
     const items: BngMenuItem[] = [];
     if (ext === 'bngl') {
