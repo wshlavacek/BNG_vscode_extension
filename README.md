@@ -9,11 +9,11 @@ This is a [VS Code](https://code.visualstudio.com/) language extension for [BioN
 
 ## Features
 
-* Syntax highlighting for BioNetGen modelling language
-* Various snippets to make writing BNGL simpler
-* A run button that automatically generates a timestamped folder and runs the current model
-* A plot button that generates a plot of the current .gdat/.cdat/.scan file using the CLI
-* Another plotting button that uses plotly to generate built-in plots within VS Code
+* **Syntax Highlighting:** Robust support for BioNetGen Language, including multi-line constructs.
+* **Intelligent Folding:** Fold `begin/end` blocks and metadata sections for easy navigation.
+* **Unified Workspace:** Run simulations, visualize networks, and plot data directly from the editor title bar.
+* **Interactive Plotting:** Explore results with a built-in variable selector, search, and visibility toggles.
+* **Professional UI:** Integrated with VS Code standard icons and themes.
 
 ## Requirements
 
@@ -30,23 +30,12 @@ The extension can be found in the [VS Code marketplace](https://marketplace.visu
 
 For other ways to install, check out the [installation guide](docs/install.md).
 
-Tips: 
+## Development
 
-* Make sure to select a folder when opening up your model, currently that's how BNG extension knows where to save your results. 
-* For correct highlighting, please make sure ```dark-bngl``` theme is selected, you can see how to change themes [here](https://code.visualstudio.com/docs/getstarted/themes#_selecting-the-color-theme)
-* If suggestions disappear for snippets, you can press ```CTRL/CMD + space``` to show suggestions again
-
-## Known Issues
-
-General issues
-* Need a `default results` folder to save results in case a folder wasn't selected before opening up a `bngl` file. 
-
-Highlighting issues
-* Using line breaks disrupt syntax highlighting
-
-Plotting issues
-* Built-in plotting button alignment is not automated
-* Sometimes the plot doesn't show up the first time you click the button
+This extension uses TypeScript and esbuild. To develop locally:
+1. `npm install`
+2. `npm run watch` to start the build in watch mode.
+3. Press `F5` to launch the Extension Development Host.
 
 Please submit an issue [here](https://github.com/RuleWorld/BNG_vscode_extension) if you find one or have any feature requests. 
 
