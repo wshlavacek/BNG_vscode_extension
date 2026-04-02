@@ -4,142 +4,160 @@ All notable changes to the "bngl-grammar-vscode" extension will be documented in
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [Unreleased]
+## [0.8.0] - 2026-04-02
 
-- 0.2.6
-Currently we have ```.bngl``` run button, a ```.gdat/.cdat/.scan``` file plotting buttons as well as highlighting and various snippets. This version added ```.scan``` file plotting button and updated ```parameter_scan``` snippet.
+### Added
+- TypeScript migration and esbuild bundling for faster load times and type safety
+- Single-button QuickPick dropdown menu replacing multiple toolbar buttons
+- Sidebar plot viewer with variable toggles, search/filter, axis scale (linear/log), line style, and legend toggle
+- Lasso/box selection on plots to filter visible time series
+- PNG and SVG export from the sidebar
+- Light theme (`light-bngl`) for light VS Code themes
+- High-contrast dark (`hc-dark-bngl`) and high-contrast light (`hc-light-bngl`) themes for accessibility
+- GitHub Actions CI pipeline for type-checking and building on push/PR
+- `onCommand:bng.menu` activation event so the menu button works before a `.bngl` file is opened
+- `extensionDependencies` for `ms-python.python` now correctly at top level of `package.json`
 
-- 0.2.8
-Added plotly plotting to ```gdat/cdat/scan``` files
+### Fixed
+- Folding provider: `splice(j)` was removing too many stack entries, breaking nested block folding
+- `bng.setup` auto-install now runs after all commands are registered (was silently failing)
+- `getPythonPath` no longer crashes when the Python extension's `featureFlags` property is missing
+- `parse_dat` no longer crashes on empty or header-only data files
+- `_send_figure_data` now uses async `vscode.workspace.fs.readFile` instead of blocking `fs.readFileSync`
+- `_getProcessList` buffers all stdout before parsing, fixing data loss from split chunks
+- `checkGdat` watcher race condition: now checks for existing files before waiting
+- `_save_image` validates data URI format and handles write errors
+- HTML injection in webview template: `fname` and `folder` are now escaped
+- Repository URLs updated from `RuleWorld` to `wshlavacek` across all files
 
-- 0.2.9
-Major behavior changes, every click on the built-in plotting now pops open a new tab. Plots retain context (warning: memory intensive) and autosize depending on the window it's opened in. Added a refresh button to do the resizing after opening. Included jQuery. Working nonce for scripts. GML viewer still under development.
+### Removed
+- Duplicate `bng.plot_dat` command (was identical to `bng.webview`)
+- Unused `bngl.plotting.menus` configuration setting
+- `.graphml` from BNGL language registration (was hijacking all GraphML files)
+- `dist/` removed from git tracking (built at publish time via `vscode:prepublish`)
+- Unused variables in `media/main.js` (`oldState`, `plot_initialized`, `current_plot_names`, `current_colors`, `updates`)
+- jQuery no longer loaded for plot views (only needed for GraphML)
+- TODO comment removed from `docs/install.md`
 
-- 0.3.0
-Plots appear in active window to give it more size. Plots now have some options on the left of the plot. Lasso selecting plots allow you to sub select time series, this is subject to heavy modification in the future. 
+## [0.7.2]
+Minor bugfixes and documentation updates. Auto-opening of files is now on by default, fixed the `writeMexFile` snippet.
 
-- 0.3.1
-Quote protecting paths so paths that contain spaces will work. Added seconds to timestamps.
+## [0.7.1]
+A process manager is added for bionetgen and all related processes. Now when you open a BNGL file you should see a BNGL process tree tab and can right click processes to send a kill signal.
 
-- 0.3.2
-Plotly hovermode default changed to closest, legends are on by default if there's <= 5 series
+## [0.7.0]
+When there is an error with the spawn runner, output channel will automatically pop up. Calling BNG upgrade will automatically activate the extension.
 
-- 0.3.3
-Included net files to the list of file extensions this extension supports and added the syntax for it. Various small behavior changes, couple bug fixes and a couple snippet changes.
+## [0.6.9]
+Plotting and graph visualizing now correctly respects the terminal runner option. Changed result placement behavior and all results will now be placed in the same folder as the bngl file that's open.
 
-- 0.3.4
-Moved plotly dropdown menus to the top. Fixed download image issue.
+## [0.6.8]
+Old terminal runner is now an extra option under extension settings.
 
-- 0.3.5
-Fixed highlighing issue with line labels, wasn't highlighting without indent. Added README gifs to assets. 
+## [0.6.7]
+Run and plotting operations moved out of terminal calls and now spawns processes to do the same thing. The output is moved to the BNGL output channel.
 
-- 0.3.6
-The gdat file that shares a name with the model is now automatically opened after running a model.
+## [0.6.6]
+The extension can now visualize `.graphml` files generated by BioNetGen using [Cytoscape.js](https://js.cytoscape.org/).
 
-- 0.3.6
-Any gdat file that's found under the folder after running is automatically opened. Plotly plots are now assigned to ctrl/cmd+shift+f1 for easier plotting, CLI plotting is now on f2. Heavily updated readme and guide.
+## [0.6.5]
+The extension now checks for the existence of perl upon activation and warns the user if Perl cannot be called.
 
-- 0.3.8
-Bugfixes to syntax highlighting in species block, mods are not recognized correctly and spaces after species amount doesn't break amount highlighting
+## [0.6.4]
+Added setting option to stop bng.setup checking upon activation. Piping all setup stdout/stderr to an output channel named `BNGL`.
 
-- 0.3.9
-Further bugfixes to syntax highlighting. Separated "species" and "pattern" objects, they should work as expected now. "matchOnce" modifier was corrected to "MatchOnce". Multiple patterns in observable block also highlights correctly now. 
+## [0.6.3]
+Added bng.setup and bng.upgrade commands. Upon activation, the extension checks for PyBioNetGen and installs it if missing.
 
-- 0.4.0
-Fixed some incorrect snippets
+## [0.6.2]
+Added `bngl.general.auto_open` and `bngl.general.result_folder` configuration options.
 
-- 0.4.1
-Adding documentation and small syntax highlighting issue where a comment after begin/end block would break highlighting. 
+## [0.6.1]
+Added a visualize button that runs `bionetgen visualize` on the file. BioNetGen requirement bumped to 0.4.9.
 
-- 0.4.2
-More highlighting fixes where "_" should be allowed in line labels and parameter names. ")" would break comment highlighting in molecule type block.
+## [0.6.0]
+Updating bionetgen commands with the -req keyword to keep the user informed on their bionetgen version.
 
-- 0.4.3
-Added highlighing for population maps block
+## [0.5.9]
+Additional plotting settings for configurations. Plot line series selection now preserves color ordering.
 
-- 0.4.4
-Added highlighing for energy patterns block
+## [0.5.8]
+Adding configuration options to BNGL plotting.
 
-- 0.4.5
-Fixed a small highlighting issue, snippets for population maps and energy patterns.
+## [0.5.7]
+Minor changes to how bionetgen runs, by default it saves a log file under the run now.
 
-- 0.4.6
-Small snippet bugfix
-
-- 0.4.7
-Action argument highlighting now expects curly braces and breaks if they are missing
-
-- 0.4.8
-Action argument highlighting that doesn't require curly braces correctly identified
-
-- 0.4.9
-Improved plotting stability by removing dependencies to older packages. 
-
-- 0.5.0
-Interactive plotting stability improvement by adding show command. 
-
-- 0.5.1
-Further plotting stability improvements by delaying the show call
-
-- 0.5.2 
-Much improved plotting stability by using plotly promises
-
-- 0.5.3
-Net file reaction block highlighing fixes
-
-- 0.5.4
-Making sure plot stays consistent when tabs are switched while sending plotting message after a timeout to ensure plotting happens. 
-
-- 0.5.5
-Changed plotting so that webview sends a message to VS Code when ready and VS Code sends the data into the webview once the ready call is made. This should vastly improve interactive plotting stability.
-
-- 0.5.6
+## [0.5.6]
 LICENSE added, minor plotly plot changes and minor snippet changes.
 
-- 0.5.7
-Minor changes to how bionetgen runs, by default it saves a log file under the run now. 
+## [0.5.5]
+Changed plotting so that webview sends a message to VS Code when ready and VS Code sends the data into the webview once the ready call is made.
 
-- 0.5.8
-Adding configuration options to BNGL plotting
+## [0.5.2]
+Much improved plotting stability by using plotly promises.
 
-- 0.5.9
-Additional plotting settings for configurations. Plot line series selection now preserves color ordering. 
+## [0.5.0]
+Interactive plotting stability improvement by adding show command.
 
-- 0.6.0
-Updating bionetgen commands with the -req keyword to keep the user informed on their bionetgen version. 
+## [0.4.9]
+Improved plotting stability by removing dependencies to older packages.
 
-- 0.6.1
-Added a visualize button that runs `bionetgen visualize -i file.bngl -t all` on the file. BioNetGen requirement bumped up to 0.4.9. Updated documentation to showcase how to use yEd in conjunction with the extension for graph visualization. 
+## [0.4.8]
+Action argument highlighting that doesn't require curly braces correctly identified.
 
-- 0.6.2
-Added two new configuration options 1) turn on and off automated gdat opening (bngl.general.auto_open) 2) selection of a folder for model run results, to be used as a fallback in case workspace is not set (bngl.general.result_folder)
+## [0.4.7]
+Action argument highlighting now expects curly braces and breaks if they are missing.
 
-- 0.6.3
-Added two new commands, bng.setup and bng.upgrade. Upon activation of the extension, the extension will use the current default python and run `python -m pip show bionetgen` to ensure PyBioNetGen is installed. If it's not installed, the extension will attempt to run `python -m pip install bionetgen --upgrade` to install PyBioNetGen. bng.upgrade can be used to force run `python -m pip install --upgrade` manually. 
+## [0.4.5]
+Fixed a small highlighting issue, snippets for population maps and energy patterns.
 
-- 0.6.4
-Added setting option to stop bng.setup checking upon activation. Piping all setup stdout/stderr an output channel named `BNGL` to make debugging easier.
+## [0.4.4]
+Added highlighting for energy patterns block.
 
-- 0.6.5
-The extension now checks for the existence of perl upon activation and warns the user if Perl cannot be called. 
+## [0.4.3]
+Added highlighting for population maps block.
 
-- 0.6.6
-The extension can now visualize `.graphml` files generated by BioNetGen using [Cytoscape.js](https://js.cytoscape.org/). There is a simple button that runs a basic layouting algorithm as well as a save button that saves the graph as a png.
+## [0.4.2]
+More highlighting fixes where "_" should be allowed in line labels and parameter names.
 
-- 0.6.7
-Run and plotting operations moved out of terminal calls and now spawns processes to do the same thing. The output is moved to the BNGL output channel. 
+## [0.4.1]
+Adding documentation and small syntax highlighting fix.
 
-- 0.6.8
-Old terminal runner is now an extra option under extension settings. 
+## [0.4.0]
+Fixed some incorrect snippets.
 
-- 0.6.9
-Plotting and graph visualizing now correctly respects the terminal runner option. Changed result placement behavior and all results will now be placed in the same folder as the bngl file that's open. 
+## [0.3.9]
+Further bugfixes to syntax highlighting. Separated "species" and "pattern" objects.
 
-- 0.7.0
-When there is an error with the spawn runner, output channel will automatically pop up. Calling BNG upgrade will automatically activate the extension. 
+## [0.3.8]
+Bugfixes to syntax highlighting in species block.
 
-- 0.7.1
-A process manager is added for bionetgen and all related processes. Now when you open a BNGL file you should notice a BNGL process tree tab in one corner and once you start a BNGL process with the run button you should see processes pop up there. You can right click them to send a kill signal to any one of them. 
+## [0.3.6]
+Any gdat file found after running is automatically opened. Plotly plots assigned to keyboard shortcuts.
 
-- 0.7.2
-Minor bugfixes and documentation updates. Auto-opening of files is now on by default, fixed the `writeMexFile` snippet. 
+## [0.3.5]
+Fixed highlighting issue with line labels. Added README gifs to assets.
+
+## [0.3.4]
+Moved plotly dropdown menus to the top. Fixed download image issue.
+
+## [0.3.3]
+Included net files to the list of file extensions and added the syntax for it.
+
+## [0.3.2]
+Plotly hovermode default changed to closest, legends are on by default if there's <= 5 series.
+
+## [0.3.1]
+Quote protecting paths so paths that contain spaces will work. Added seconds to timestamps.
+
+## [0.3.0]
+Plots appear in active window. Lasso selecting plots allow you to sub select time series.
+
+## [0.2.9]
+Major behavior changes, every click on the built-in plotting now pops open a new tab. Added jQuery, working nonce for scripts.
+
+## [0.2.8]
+Added plotly plotting to `gdat/cdat/scan` files.
+
+## [0.2.6]
+Run button, plotting buttons, highlighting and various snippets. Added `.scan` file plotting button.

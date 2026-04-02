@@ -49,8 +49,10 @@ export class ProcessManagerProvider implements vscode.TreeDataProvider<TrackedPr
 
     refresh() {
         setTimeout(async () => {
-            await this._processManager.refresh();
-            this._onDidChangeTreeData.fire();
+            if (this._processManager.hasTrackedProcesses) {
+                await this._processManager.refresh();
+                this._onDidChangeTreeData.fire();
+            }
             this.refresh();
         }, refreshInterval);
     }
@@ -69,6 +71,10 @@ export class ProcessManager {
     // provides roots of custom process trees to be displayed in tree view
     get toplevelProcesses(): TrackedProcessObject[] {
         return Array.from(this._openProcessesTracked.values());
+    }
+
+    get hasTrackedProcesses(): boolean {
+        return this._openProcessesTracked.size > 0;
     }
 
     killAllProcesses() {
@@ -209,13 +215,18 @@ export class ProcessManager {
                 resolve([]);
             });
 
-            // parse stdout to get information about open processes
+            // buffer all stdout data and parse on close to avoid split-chunk issues
+            let stdout = '';
             util.stdout?.setEncoding('utf8');
             util.stdout?.on('data', (data) => {
-                if (/[0-9]/.test(data)) {
-                    let lines = data.trim().split(/\n/);
+                stdout += data;
+            });
+
+            util.on('close', () => {
+                if (/[0-9]/.test(stdout)) {
+                    let lines = stdout.trim().split(/\n/);
                     lines = lines.filter((line: string) => /[0-9]/.test(line));
-                    
+
                     for (const line of lines) {
                         const processInfo = line.trim().split(/\s+/);
                         processList.push({
@@ -226,9 +237,6 @@ export class ProcessManager {
                         });
                     }
                 }
-            });
-
-            util.on('close', () => {
                 resolve(processList);
             });
         });

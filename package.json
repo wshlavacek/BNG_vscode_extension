@@ -2,7 +2,7 @@
     "publisher": "als251",
     "repository": {
         "type": "git",
-        "url": "https://github.com/RuleWorld/BNG_vscode_extension"
+        "url": "https://github.com/wshlavacek/BNG_vscode_extension"
     },
     "icon": "assets/flagman.png",
     "galleryBanner": {
@@ -33,9 +33,13 @@
         "test": "node ./out/test/runTest.js"
     },
     "main": "./dist/extension.js",
+    "extensionDependencies": [
+        "ms-python.python"
+    ],
     "activationEvents": [
         "onCommand:bng.setup",
         "onCommand:bng.upgrade",
+        "onCommand:bng.menu",
         "onLanguage:bngl"
     ],
     "contributes": {
@@ -51,8 +55,7 @@
                     ".net",
                     ".gdat",
                     ".cdat",
-                    ".scan",
-                    ".graphml"
+                    ".scan"
                 ],
                 "configuration": "./bngl-language-configuration.json"
             }
@@ -75,6 +78,21 @@
                 "label": "dark-bngl",
                 "uiTheme": "vs-dark",
                 "path": "./themes/dark-bngl.json"
+            },
+            {
+                "label": "light-bngl",
+                "uiTheme": "vs",
+                "path": "./themes/light-bngl.json"
+            },
+            {
+                "label": "hc-dark-bngl",
+                "uiTheme": "hc-black",
+                "path": "./themes/hc-dark-bngl.json"
+            },
+            {
+                "label": "hc-light-bngl",
+                "uiTheme": "hc-light",
+                "path": "./themes/hc-light-bngl.json"
             }
         ],
         "commands": [
@@ -94,17 +112,13 @@
                 "command": "bng.run_viz",
                 "title": "BNG: Visualize Network"
             },
-            {
-                "command": "bng.plot_dat",
-                "title": "BNG: Export Data Plot"
-            },
-            {
+{
                 "command": "bng.webview",
                 "title": "BNG: Open Plot / Viewer"
             },
             {
                 "command": "bng.setup",
-                "title": "BNG: Setup"
+                "title": "BNG: Install/Check PyBioNetGen"
             },
             {
                 "command": "bng.upgrade",
@@ -167,20 +181,11 @@
                 "when": "resourceLangId == bngl && resourceExtname == .bngl"
             },
             {
-                "command": "bng.plot_dat",
-                "key": "ctrl+shift+f2",
-                "mac": "cmd+shift+f2",
-                "when": "resourceExtname == .gdat || resourceExtname == .cdat || resourceExtname == .scan"
-            },
-            {
                 "command": "bng.webview",
                 "key": "ctrl+shift+f1",
                 "mac": "cmd+shift+f1",
                 "when": "resourceExtname == .gdat || resourceExtname == .cdat || resourceExtname == .scan"
             }
-        ],
-        "extensionDependencies": [
-            "ms-python.python"
         ],
         "configuration": {
             "title": "BioNetGen",
@@ -218,11 +223,6 @@
                     "type": "number",
                     "default": 50,
                     "minimum": 1
-                },
-                "bngl.plotting.menus": {
-                    "markdownDescription": "Enable or disable plotly menus",
-                    "type": "boolean",
-                    "default": true
                 }
             }
         }
