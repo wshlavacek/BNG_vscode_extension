@@ -30,11 +30,15 @@
                 const varList = document.getElementById('var-list');
                 varList.innerHTML = '';
 
-                for (let i = 1; i < message.names.length; i++) {
-                    let color = def_colors[(i - 1) % clr_cnt];
+                for (let i = 0; i < message.names.length; i++) {
+                    // names[0] is the x-axis label (e.g. "time"), data series start at index 1
+                    if (i === 0) continue;
+
+                    let seriesIndex = i - 1;
+                    let color = def_colors[seriesIndex % clr_cnt];
                     current_colors.push(color);
 
-                    let is_visible = i <= message.max_series;
+                    let is_visible = seriesIndex < message.max_series;
 
                     let this_data = {
                         x: message.data[0],
@@ -57,11 +61,11 @@
                         if (e.target.tagName !== 'INPUT') {
                             const cb = item.querySelector('input');
                             cb.checked = !cb.checked;
-                            updateVisibility(i - 1, cb.checked);
+                            updateVisibility(seriesIndex, cb.checked);
                         }
                     };
                     item.querySelector('input').onchange = (e) => {
-                        updateVisibility(i - 1, e.target.checked);
+                        updateVisibility(seriesIndex, e.target.checked);
                     };
                     varList.appendChild(item);
                 }
@@ -91,6 +95,51 @@
                     const indices = current_plot_data.map((_, i) => i);
                     Plotly.restyle('plot', { visible: false }, indices);
                     document.querySelectorAll('.var-item input').forEach(cb => cb.checked = false);
+                };
+
+                // Axis scale controls
+                function setAxisType(axis, type) {
+                    let update = {};
+                    update[axis + '.type'] = type;
+                    Plotly.relayout('plot', update);
+                }
+
+                document.getElementById('xaxis-linear').onclick = function() {
+                    setAxisType('xaxis', 'linear');
+                    document.getElementById('xaxis-linear').classList.add('active');
+                    document.getElementById('xaxis-log').classList.remove('active');
+                };
+                document.getElementById('xaxis-log').onclick = function() {
+                    setAxisType('xaxis', 'log');
+                    document.getElementById('xaxis-log').classList.add('active');
+                    document.getElementById('xaxis-linear').classList.remove('active');
+                };
+                document.getElementById('yaxis-linear').onclick = function() {
+                    setAxisType('yaxis', 'linear');
+                    document.getElementById('yaxis-linear').classList.add('active');
+                    document.getElementById('yaxis-log').classList.remove('active');
+                };
+                document.getElementById('yaxis-log').onclick = function() {
+                    setAxisType('yaxis', 'log');
+                    document.getElementById('yaxis-log').classList.add('active');
+                    document.getElementById('yaxis-linear').classList.remove('active');
+                };
+
+                // Line style controls
+                document.getElementById('style-lines').onclick = function() {
+                    Plotly.restyle('plot', { mode: 'lines' });
+                    document.querySelectorAll('.control-group:last-child .control-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                };
+                document.getElementById('style-markers').onclick = function() {
+                    Plotly.restyle('plot', { mode: 'markers' });
+                    document.querySelectorAll('.control-group:last-child .control-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                };
+                document.getElementById('style-both').onclick = function() {
+                    Plotly.restyle('plot', { mode: 'lines+markers' });
+                    document.querySelectorAll('.control-group:last-child .control-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
                 };
 
                 // Export buttons

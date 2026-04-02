@@ -93,6 +93,43 @@ body {
 	width: auto !important;
 }
 
+.sidebar-controls {
+	padding: 10px;
+	border-top: 1px solid var(--vscode-panel-border);
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.control-group label {
+	font-size: 0.8em;
+	opacity: 0.7;
+	margin-bottom: 3px;
+	display: block;
+}
+
+.control-buttons {
+	display: flex;
+	gap: 2px;
+}
+
+.control-btn {
+	flex: 1;
+	font-size: 0.75em;
+	padding: 3px 6px;
+	color: var(--vscode-button-secondaryForeground);
+	background: var(--vscode-button-secondaryBackground);
+}
+
+.control-btn:hover {
+	background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.control-btn.active {
+	color: var(--vscode-button-foreground);
+	background: var(--vscode-button-background);
+}
+
 .sidebar-footer {
 	padding: 10px;
 	border-top: 1px solid var(--vscode-panel-border);

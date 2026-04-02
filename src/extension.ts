@@ -195,6 +195,36 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('bng.process_cleanup', () => { processManager.killAllProcesses() }));
 	context.subscriptions.push(vscode.commands.registerCommand('bng.kill_process', (processObject) => { processManager.killProcess(processObject) }));
 
+	context.subscriptions.push(vscode.commands.registerCommand('bng.menu', async () => {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) return;
+		const ext = editor.document.fileName.split('.').pop()?.toLowerCase();
+
+		interface BngMenuItem extends vscode.QuickPickItem { cmd: string }
+
+		const items: BngMenuItem[] = [];
+		if (ext === 'bngl') {
+			items.push(
+				{ label: '$(play) Run Simulation', description: 'Run the current BNGL model', cmd: 'bng.run_bngl' },
+				{ label: '$(graph) Visualize Network', description: 'Generate network visualizations', cmd: 'bng.run_viz' },
+			);
+		}
+		if (['gdat', 'cdat', 'scan', 'graphml'].includes(ext || '')) {
+			items.push(
+				{ label: '$(pulse) Open Plot / Viewer', description: 'Open built-in plot or graph viewer', cmd: 'bng.webview' },
+			);
+		}
+		items.push(
+			{ label: '$(tools) BNG Setup', description: 'Install or check BioNetGen + dependencies', cmd: 'bng.setup' },
+			{ label: '$(cloud-upload) BNG Upgrade', description: 'Upgrade PyBioNetGen to latest version', cmd: 'bng.upgrade' },
+		);
+
+		const pick = await vscode.window.showQuickPick(items, { placeHolder: 'BioNetGen: Select an action' });
+		if (pick) {
+			vscode.commands.executeCommand(pick.cmd);
+		}
+	}));
+
 	const treeView = vscode.window.createTreeView('processManagerTreeView', {treeDataProvider: new ProcessManagerProvider(processManager)});
 	context.subscriptions.push(treeView);
 	vscode.commands.executeCommand('setContext', 'bng.processManagerActive', true);
@@ -410,6 +440,30 @@ class PlotPanel {
 						<input type="text" id="var-filter" placeholder="Filter variables...">
 					</div>
 					<div id="var-list"></div>
+					<div class="sidebar-controls">
+						<div class="control-group">
+							<label>X Axis</label>
+							<div class="control-buttons">
+								<button id="xaxis-linear" class="control-btn active">Linear</button>
+								<button id="xaxis-log" class="control-btn">Log</button>
+							</div>
+						</div>
+						<div class="control-group">
+							<label>Y Axis</label>
+							<div class="control-buttons">
+								<button id="yaxis-linear" class="control-btn active">Linear</button>
+								<button id="yaxis-log" class="control-btn">Log</button>
+							</div>
+						</div>
+						<div class="control-group">
+							<label>Style</label>
+							<div class="control-buttons">
+								<button id="style-lines" class="control-btn active">Lines</button>
+								<button id="style-markers" class="control-btn">Markers</button>
+								<button id="style-both" class="control-btn">Both</button>
+							</div>
+						</div>
+					</div>
 					<div class="sidebar-footer">
 						<button id="export-png">Export PNG</button>
 						<button id="export-svg" class="secondary">Export SVG</button>
@@ -427,7 +481,7 @@ class PlotPanel {
 			<html lang="en">
 			<head>
 				<meta charset="UTF-8">
-				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
+				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data: blob:; script-src 'nonce-${nonce}' 'unsafe-eval';">
 				<meta name="viewport" content="width=device-width, initial-scale=1.0">
 				<link href="${stylesMainUri}" rel="stylesheet">
 			</head>

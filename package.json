@@ -21,6 +21,17 @@
         "Snippets",
         "Themes"
     ],
+    "scripts": {
+        "vscode:prepublish": "npm run package",
+        "build": "node esbuild.js",
+        "compile": "npm run check-types && node esbuild.js",
+        "watch": "node esbuild.js --watch",
+        "package": "npm run check-types && node esbuild.js --production",
+        "check-types": "tsc --noEmit",
+        "lint": "eslint .",
+        "pretest": "npm run compile && npm run lint",
+        "test": "node ./out/test/runTest.js"
+    },
     "main": "./dist/extension.js",
     "activationEvents": [
         "onCommand:bng.setup",
@@ -68,36 +79,40 @@
         ],
         "commands": [
             {
+                "command": "bng.menu",
+                "title": "BioNetGen",
+                "icon": {
+                    "dark": "./assets/flagman.png",
+                    "light": "./assets/flagman.png"
+                }
+            },
+            {
                 "command": "bng.run_bngl",
-                "title": "Run Simulation",
-                "icon": "$(play)"
+                "title": "BNG: Run Simulation"
             },
             {
                 "command": "bng.run_viz",
-                "title": "Visualize Network",
-                "icon": "$(graph)"
+                "title": "BNG: Visualize Network"
             },
             {
                 "command": "bng.plot_dat",
-                "title": "Export Data Plot",
-                "icon": "$(save)"
+                "title": "BNG: Export Data Plot"
             },
             {
                 "command": "bng.webview",
-                "title": "Open BioNetGen View",
-                "icon": "$(pulse)"
+                "title": "BNG: Open Plot / Viewer"
             },
             {
                 "command": "bng.setup",
-                "title": "BNG setup"
+                "title": "BNG: Setup"
             },
             {
                 "command": "bng.upgrade",
-                "title": "BNG upgrade"
+                "title": "BNG: Upgrade"
             },
             {
                 "command": "bng.process_cleanup",
-                "title": "BNG process cleanup"
+                "title": "BNG: Kill All Processes"
             },
             {
                 "command": "bng.kill_process",
@@ -116,19 +131,9 @@
         "menus": {
             "editor/title": [
                 {
-                    "when": "resourceLangId == bngl && resourceExtname == .bngl",
+                    "when": "resourceLangId == bngl || resourceExtname == .gdat || resourceExtname == .cdat || resourceExtname == .scan || resourceExtname == .graphml",
                     "group": "navigation",
-                    "command": "bng.run_bngl"
-                },
-                {
-                    "when": "resourceLangId == bngl && resourceExtname == .bngl",
-                    "group": "navigation",
-                    "command": "bng.run_viz"
-                },
-                {
-                    "when": "resourceExtname == .gdat || resourceExtname == .cdat || resourceExtname == .scan || resourceExtname == .graphml",
-                    "group": "navigation",
-                    "command": "bng.webview"
+                    "command": "bng.menu"
                 }
             ],
             "view/item/context": [
@@ -177,16 +182,6 @@
         "extensionDependencies": [
             "ms-python.python"
         ],
-        "scripts": {
-            "vscode:prepublish": "npm run package",
-            "compile": "npm run check-types && node esbuild.js",
-            "watch": "npm run check-types && node esbuild.js --watch",
-            "package": "npm run check-types && node esbuild.js --production",
-            "check-types": "tsc --noEmit",
-            "lint": "eslint .",
-            "pretest": "npm run compile && npm run lint",
-            "test": "node ./out/test/runTest.js"
-        },
         "configuration": {
             "title": "BioNetGen",
             "properties": {
