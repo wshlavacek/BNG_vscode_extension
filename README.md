@@ -1,31 +1,44 @@
 [![Documentation Status](https://readthedocs.org/projects/bng-vs-code-extension/badge/?version=latest)](https://bng-vs-code-extension.readthedocs.io/en/latest/?badge=latest)
 
-# BioNetGen VS Code extension
+# BioNetGen (BNG) VS Code Extension
 
-This is a [VS Code](https://code.visualstudio.com/) language extension for [BioNetGen modeling language](http://bionetgen.org/). Please read the [installation instructions](https://github.com/wshlavacek/BNG_vscode_extension#installation) and see [here](https://bng-vs-code-extension.readthedocs.io/en/latest/) for a starter guide.
+A [VS Code](https://code.visualstudio.com/) extension for the [BioNetGen](http://bionetgen.org/) rule-based modeling platform. Write, validate, simulate, and visualize BioNetGen models without leaving the editor.
 
 ## Features
 
-* **Syntax Highlighting:** Robust support for BioNetGen Language, including multi-line constructs.
-* **Intelligent Folding:** Fold `begin/end` blocks and metadata sections for easy navigation.
-* **Unified Workspace:** Run simulations, visualize networks, and plot data directly from the editor title bar.
-* **Interactive Plotting:** Explore results with a built-in variable selector, search, and visibility toggles.
-* **Professional UI:** Integrated with VS Code standard icons and themes.
+* **Syntax Highlighting:** Scoping for all BNGL constructs, with dark, light, and high-contrast themes.
+* **Language Server:** Real-time diagnostics (mismatched blocks, duplicate definitions, unused parameters), autocomplete for block types, actions, parameters, molecule types, and built-in functions, go-to-definition, find references, and hover information.
+* **Intelligent Folding:** Fold `begin/end` blocks and metadata sections.
+* **Simulation:** Run BioNetGen simulations directly from the editor and monitor processes in a sidebar tree view.
+* **Network Visualization:** Generate contact maps, rule visualizations, and regulatory graphs.
+* **Interactive Plotting:** Plot `.gdat`/`.cdat`/`.scan` results with a built-in viewer featuring variable selection, axis scale toggles, line style controls, and image export.
+* **Snippets:** Expand block skeletons, line templates, action calls, and math functions with `Tab`.
+
+## Usage
+
+1. Open or create a `.bngl` file. Syntax highlighting and language server features activate automatically.
+2. Click the **BioNetGen icon** in the editor title bar to open the command menu. From the dropdown you can:
+   - **Run Simulation** (`Ctrl/Cmd+Shift+F1` on `.bngl` files)
+   - **Visualize Network**
+   - **Open Plot / Viewer** (`Ctrl/Cmd+Shift+F1` on `.gdat`/`.cdat`/`.scan` files)
+   - **Install/Check PyBioNetGen**
+   - **Upgrade PyBioNetGen**
+3. After a simulation completes, the resulting `.gdat` file opens automatically. Click the BioNetGen icon to launch the interactive plot viewer.
+4. Use the **sidebar controls** in the plot viewer to toggle variables on/off, switch axis scales (linear/log), change line styles, toggle the legend, and export images.
 
 ## Requirements
 
-To use the run and plot buttons the default VS Code terminal you are using needs to have access to
-* [Perl](https://www.perl.org/)
-* [Python3](https://www.python.org/), preferably [anaconda python](https://docs.anaconda.com/anaconda/)
-* [BioNetGen commmand line interface](https://github.com/RuleWorld/PyBioNetGen)
+The editing features (highlighting, diagnostics, autocomplete, navigation) work out of the box. To run simulations and visualizations you also need:
 
-Please note that this tool is in active early development and is subject to sweeping changes.
+* [Python 3](https://www.python.org/) (we recommend [Anaconda](https://docs.anaconda.com/anaconda/))
+* [PyBioNetGen](https://github.com/RuleWorld/PyBioNetGen) (`pip install bionetgen`)
+* Perl (Windows users: `conda install -c conda-forge perl`)
 
 ## Installation
 
-The extension can be found in the [VS Code marketplace](https://marketplace.visualstudio.com/vscode) as [BioNetGen Language](https://marketplace.visualstudio.com/items?itemName=als251.bngl). See [here](https://code.visualstudio.com/docs/editor/extension-gallery#_browse-for-extensions) to learn how to browse and install extensions in VS Code.
+The extension is available on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=als251.bngl): search for **BioNetGen** in the Extensions tab.
 
-For other ways to install, check out the [installation guide](docs/install.md).
+For installation from a VSIX package or running from source, see the [installation guide](docs/install.md).
 
 ## Snippets
 
@@ -112,15 +125,12 @@ Type a prefix and press `Tab` to expand. All snippets are available in `.bngl` f
 
 ## Development
 
-This extension uses TypeScript and esbuild. To develop locally:
-1. `npm install`
-2. `npm run watch` to start the build in watch mode.
-3. Press `F5` to launch the Extension Development Host.
+See the [developer guide](docs/source/developers.rst) for architecture details and build instructions. Quick start:
 
-Please submit an issue [here](https://github.com/wshlavacek/BNG_vscode_extension) if you find one or have any feature requests. 
+```
+npm install
+npm run watch   # start build in watch mode
+# Press F5 to launch the Extension Development Host
+```
 
-## Release Notes
-
-This extension is still in alpha stage of development. 
-
------------------------------------------------------------------------------------------------------------
+Please submit issues and feature requests at [GitHub](https://github.com/wshlavacek/BNG_vscode_extension/issues).
