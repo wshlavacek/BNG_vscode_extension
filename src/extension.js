@@ -422,6 +422,81 @@ function activate(context) {
 
 	let processManagerTreeView = vscode.window.createTreeView('processManagerTreeView', {treeDataProvider: new ProcessManagerProvider(processManager)});
 	vscode.commands.executeCommand('setContext', 'bng.processManagerActive', true); // show process manager tree view only when extension is active
+
+	// Register folding range provider for BNGL files
+	context.subscriptions.push(
+		vscode.languages.registerFoldingRangeProvider({ language: 'bngl' }, {
+			provideFoldingRanges(document) {
+				const ranges = [];
+				const beginStack = [];
+
+				/**
+				 * Normalizes BNGL block names for matching.
+				 * @param {string} name
+				 * @returns {string}
+				 */
+				function normalizeName(name) {
+					let n = name.trim().toLowerCase();
+					// Remove trailing comments if any
+					n = n.split('#')[0].trim();
+					// Handle common synonyms
+					if (n === 'reaction rules' || n === 'rules') return 'rules';
+					if (n === 'molecule types' || n === 'molecules') return 'molecules';
+					if (n === 'seed species' || n === 'species') return 'species';
+					return n;
+				}
+
+				for (let i = 0; i < document.lineCount; i++) {
+					const lineText = document.lineAt(i).text;
+					const trimmed = lineText.trimStart();
+
+					// begin/end block folding
+					const beginMatch = trimmed.match(/^begin\s+(.+)/i);
+					if (beginMatch) {
+						const name = normalizeName(beginMatch[1]);
+						beginStack.push({ line: i, name: name });
+						continue;
+					}
+					const endMatch = trimmed.match(/^end\s+(.+)/i);
+					if (endMatch && beginStack.length > 0) {
+						const endName = normalizeName(endMatch[1]);
+						// Find matching begin (search from top of stack)
+						for (let j = beginStack.length - 1; j >= 0; j--) {
+							if (beginStack[j].name === endName) {
+								ranges.push(new vscode.FoldingRange(beginStack[j].line, i, vscode.FoldingRangeKind.Region));
+								// When we match a block, we close it and remove it and anything above it from the stack.
+								// This ensures that mismatched inner blocks don't persist and cause random widgets.
+								beginStack.splice(j);
+								break;
+							}
+						}
+						continue;
+					}
+
+					// #@ structured comment block folding
+					const metaMatch = trimmed.match(/^#@\w+/);
+					if (metaMatch) {
+						// Look ahead for continuation lines (# lines that are not #@ lines)
+						let endLine = i;
+						for (let j = i + 1; j < document.lineCount; j++) {
+							const nextTrimmed = document.lineAt(j).text.trimStart();
+							// A new #@ line starts a new section, and we don't want to fold into it.
+							// An empty line or non-comment line also ends the block.
+							if (nextTrimmed.match(/^#@\w+/) || nextTrimmed === '' || !nextTrimmed.startsWith('#')) {
+								break;
+							}
+							endLine = j;
+						}
+						if (endLine > i) {
+							ranges.push(new vscode.FoldingRange(i, endLine, vscode.FoldingRangeKind.Comment));
+						}
+					}
+				}
+
+				return ranges;
+			}
+		})
+	);
 	
 	// TODO make this work
 	// resurrect webview 
