@@ -13,7 +13,7 @@ export async function getPythonPath(channel?: vscode.OutputChannel): Promise<str
         return defaultPath;
     }
 
-    const flagValue = pythonExt.packageJSON.featureFlags.usingNewInterpreterStorage;
+    const flagValue = pythonExt.packageJSON?.featureFlags?.usingNewInterpreterStorage;
 
     if (flagValue) {
         if (!pythonExt.isActive) {

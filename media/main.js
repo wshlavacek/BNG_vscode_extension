@@ -3,7 +3,6 @@
 (function () {
     const vscode = acquireVsCodeApi();
 
-    const oldState = vscode.getState();
     const network = document.getElementById('network');
 
     const page_title = document.getElementById('page_title').innerText;
@@ -13,18 +12,13 @@
                         "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"];
     const clr_cnt = def_colors.length;
 
-    let plot_initialized = false;
     let current_plot_data = [];
-    let current_plot_names = [];
-    let current_colors = [];
 
     // Handle messages sent from the extension to the webview
     window.addEventListener('message', event => {
         const message = event.data; // The json data that the extension sent
         switch (message.command) {
             case 'plot':
-                current_plot_names = message.names;
-                current_colors = [];
                 current_plot_data = [];
 
                 const varList = document.getElementById('var-list');
@@ -36,7 +30,6 @@
 
                     let seriesIndex = i - 1;
                     let color = def_colors[seriesIndex % clr_cnt];
-                    current_colors.push(color);
 
                     let is_visible = seriesIndex < message.max_series;
 
@@ -86,7 +79,6 @@
 
                 // Show All / None
                 document.getElementById('show-all').onclick = () => {
-                    const updates = current_plot_data.map(() => true);
                     const indices = current_plot_data.map((_, i) => i);
                     Plotly.restyle('plot', { visible: true }, indices);
                     document.querySelectorAll('.var-item input').forEach(cb => cb.checked = true);
@@ -123,6 +115,18 @@
                     setAxisType('yaxis', 'log');
                     document.getElementById('yaxis-log').classList.add('active');
                     document.getElementById('yaxis-linear').classList.remove('active');
+                };
+
+                // Legend toggle
+                document.getElementById('legend-on').onclick = function() {
+                    Plotly.relayout('plot', { showlegend: true });
+                    this.classList.add('active');
+                    document.getElementById('legend-off').classList.remove('active');
+                };
+                document.getElementById('legend-off').onclick = function() {
+                    Plotly.relayout('plot', { showlegend: false });
+                    this.classList.add('active');
+                    document.getElementById('legend-on').classList.remove('active');
                 };
 
                 // Line style controls
@@ -179,11 +183,36 @@
                 let config = {
                     responsive: true,
                     displaylogo: false,
-                    modeBarButtonsToRemove: ['toImage']
+                    modeBarButtonsToRemove: ['toImage'],
+                    modeBarButtonsToAdd: ['select2d', 'lasso2d']
                 };
 
                 Plotly.newPlot('plot', current_plot_data, plot_options, config);
-                plot_initialized = true;
+
+                // Lasso/box selection to filter visible series
+                const plotEl = document.getElementById('plot');
+                plotEl.on('plotly_selected', function(eventData) {
+                    if (!eventData || !eventData.points || eventData.points.length === 0) {
+                        // Empty selection — restore all series to their checkbox state
+                        const checkboxes = document.querySelectorAll('.var-item input');
+                        checkboxes.forEach((cb, idx) => {
+                            current_plot_data[idx].visible = cb.checked;
+                        });
+                        Plotly.restyle('plot', { visible: current_plot_data.map(d => d.visible) });
+                        return;
+                    }
+                    // Find which series have points in the selection
+                    const selectedTraces = new Set(eventData.points.map(p => p.curveNumber));
+                    current_plot_data.forEach((trace, idx) => {
+                        trace.visible = selectedTraces.has(idx);
+                    });
+                    Plotly.restyle('plot', { visible: current_plot_data.map(d => d.visible) });
+                    // Sync sidebar checkboxes
+                    document.querySelectorAll('.var-item input').forEach((cb, idx) => {
+                        cb.checked = current_plot_data[idx].visible;
+                    });
+                });
+
                 break;
             case 'network':
                 // parse GraphML & render with cytoscape.js

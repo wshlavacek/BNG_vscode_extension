@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
 import * as path from 'path';
 import { spawnAsync } from './utils/spawnAsync';
 import { getPythonPath } from './utils/getPythonPath';
@@ -8,12 +7,6 @@ import { ProcessManager, ProcessManagerProvider } from './utils/processManagemen
 export function activate(context: vscode.ExtensionContext) {
 	const processManager = new ProcessManager();
 	const bngl_channel = vscode.window.createOutputChannel("BNGL");
-
-	const config = vscode.workspace.getConfiguration("bngl");
-	if (config.get<boolean>("general.auto_install")) {
-		bngl_channel.appendLine("Running BNG auto-install ...");
-		vscode.commands.executeCommand('bng.setup');
-	}
 
 	const PYBNG_VERSION = "0.5.0";
 
@@ -129,6 +122,19 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 			else {
 				vscode.window.showInformationMessage("Finished visualizing successfully.");
+				// Open generated .graphml files
+				try {
+					const files = await vscode.workspace.fs.readDirectory(new_fold_uri);
+					for (const [name, type] of files) {
+						if (name.endsWith('.graphml')) {
+							const graphmlUri = vscode.Uri.joinPath(new_fold_uri, name);
+							await vscode.commands.executeCommand('vscode.open', graphmlUri);
+							PlotPanel.create(context.extensionUri);
+						}
+					}
+				} catch (err) {
+					bngl_channel.appendLine(`Could not open visualization files: ${err}`);
+				}
 			}
 		}
 	}
@@ -188,7 +194,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.commands.registerCommand('bng.run_bngl', runCommandHandler));
 	context.subscriptions.push(vscode.commands.registerCommand('bng.run_viz', vizCommandHandler));
-	context.subscriptions.push(vscode.commands.registerCommand('bng.plot_dat', () => { PlotPanel.create(context.extensionUri) }));
 	context.subscriptions.push(vscode.commands.registerCommand('bng.webview', () => { PlotPanel.create(context.extensionUri) }));
 	context.subscriptions.push(vscode.commands.registerCommand('bng.setup', setupCommandHandler));
 	context.subscriptions.push(vscode.commands.registerCommand('bng.upgrade', upgradeCommandHandler));
@@ -205,18 +210,23 @@ export function activate(context: vscode.ExtensionContext) {
 		const items: BngMenuItem[] = [];
 		if (ext === 'bngl') {
 			items.push(
-				{ label: '$(play) Run Simulation', description: 'Run the current BNGL model', cmd: 'bng.run_bngl' },
-				{ label: '$(graph) Visualize Network', description: 'Generate network visualizations', cmd: 'bng.run_viz' },
+				{ label: '$(play) Simulate', description: 'Run the current BNGL model', cmd: 'bng.run_bngl' },
+				{ label: '$(graph) Visualize', description: 'Generate contact map and network graphs', cmd: 'bng.run_viz' },
 			);
 		}
-		if (['gdat', 'cdat', 'scan', 'graphml'].includes(ext || '')) {
+		if (['gdat', 'cdat', 'scan'].includes(ext || '')) {
 			items.push(
-				{ label: '$(pulse) Open Plot / Viewer', description: 'Open built-in plot or graph viewer', cmd: 'bng.webview' },
+				{ label: '$(pulse) Plot', description: 'Open built-in plot viewer', cmd: 'bng.webview' },
+			);
+		}
+		if (ext === 'graphml') {
+			items.push(
+				{ label: '$(type-hierarchy) View', description: 'Open network graph viewer', cmd: 'bng.webview' },
 			);
 		}
 		items.push(
-			{ label: '$(tools) BNG Setup', description: 'Install or check BioNetGen + dependencies', cmd: 'bng.setup' },
-			{ label: '$(cloud-upload) BNG Upgrade', description: 'Upgrade PyBioNetGen to latest version', cmd: 'bng.upgrade' },
+			{ label: '$(tools) Install', description: 'Check and install PyBioNetGen', cmd: 'bng.setup' },
+			{ label: '$(cloud-upload) Upgrade', description: 'Upgrade PyBioNetGen to latest version', cmd: 'bng.upgrade' },
 		);
 
 		const pick = await vscode.window.showQuickPick(items, { placeHolder: 'BioNetGen: Select an action' });
@@ -228,6 +238,12 @@ export function activate(context: vscode.ExtensionContext) {
 	const treeView = vscode.window.createTreeView('processManagerTreeView', {treeDataProvider: new ProcessManagerProvider(processManager)});
 	context.subscriptions.push(treeView);
 	vscode.commands.executeCommand('setContext', 'bng.processManagerActive', true);
+
+	const config = vscode.workspace.getConfiguration("bngl");
+	if (config.get<boolean>("general.auto_install")) {
+		bngl_channel.appendLine("Checking PyBioNetGen installation ...");
+		vscode.commands.executeCommand('bng.setup');
+	}
 
 	context.subscriptions.push(
 		vscode.languages.registerFoldingRangeProvider({ language: 'bngl' }, {
@@ -260,7 +276,7 @@ export function activate(context: vscode.ExtensionContext) {
 						for (let j = beginStack.length - 1; j >= 0; j--) {
 							if (beginStack[j].name === endName) {
 								ranges.push(new vscode.FoldingRange(beginStack[j].line, i, vscode.FoldingRangeKind.Region));
-								beginStack.splice(j);
+								beginStack.splice(j, 1);
 								break;
 							}
 						}
@@ -313,7 +329,17 @@ async function openGdat(new_fold_uri: vscode.Uri, fname_noext: string, context: 
 	}
 }
 
-function checkGdat(outDir: string, timeout: number): Promise<void> {
+async function checkGdat(outDir: string, timeout: number): Promise<void> {
+	const dirUri = vscode.Uri.file(outDir);
+	try {
+		const entries = await vscode.workspace.fs.readDirectory(dirUri);
+		if (entries.some(([name]) => name.endsWith('.gdat'))) {
+			return;
+		}
+	} catch {
+		// directory may not exist yet — fall through to watcher
+	}
+
 	return new Promise((resolve, reject) => {
 		const timer = setTimeout(() => {
 			watcher.dispose();
@@ -417,6 +443,12 @@ class PlotPanel {
 	}
 
 	private _get_html(webview: vscode.Webview, nonce: string, fname: string, ext: string, folder: string, stylesMainUri: vscode.Uri, jqUri: vscode.Uri, cytoUri: vscode.Uri, plotlyUri: vscode.Uri, scriptUri: vscode.Uri) {
+		function escapeHtml(s: string): string {
+			return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+		}
+		const safeFname = escapeHtml(fname);
+		const safeExt = escapeHtml(ext);
+		const safeFolder = escapeHtml(folder);
 		let content = '';
 		if (ext === "graphml") {
 			content = `
@@ -456,6 +488,13 @@ class PlotPanel {
 							</div>
 						</div>
 						<div class="control-group">
+							<label>Legend</label>
+							<div class="control-buttons">
+								<button id="legend-on" class="control-btn active">On</button>
+								<button id="legend-off" class="control-btn">Off</button>
+							</div>
+						</div>
+						<div class="control-group">
 							<label>Style</label>
 							<div class="control-buttons">
 								<button id="style-lines" class="control-btn active">Lines</button>
@@ -472,7 +511,6 @@ class PlotPanel {
 				<div id="plot-container">
 					<div id="plot"></div>
 				</div>
-				<script nonce="${nonce}" src="${jqUri}"></script>
 				<script nonce="${nonce}" src="${plotlyUri}"></script>
 			`;
 		}
@@ -486,17 +524,19 @@ class PlotPanel {
 				<link href="${stylesMainUri}" rel="stylesheet">
 			</head>
 			<body>
-				<div id="page_title" style="display: none;">${fname}_${ext}</div>
-				<div id="folder" style="display: none;">${folder}</div>
+				<div id="page_title" style="display: none;">${safeFname}_${safeExt}</div>
+				<div id="folder" style="display: none;">${safeFolder}</div>
 				${content}
 				<script nonce="${nonce}" src="${scriptUri}"></script>
 			</body>
 			</html>`;
 	}
 
-	private _send_figure_data() {
+	private async _send_figure_data() {
 		const ext = path.extname(this._fpath).substring(1);
-		const text = fs.readFileSync(this._fpath, 'utf8');
+		const fileUri = vscode.Uri.file(this._fpath);
+		const rawBytes = await vscode.workspace.fs.readFile(fileUri);
+		const text = Buffer.from(rawBytes).toString('utf8');
 		const config = vscode.workspace.getConfiguration("bngl");
 
 		if (ext === "graphml") {
@@ -510,7 +550,6 @@ class PlotPanel {
 				data: data[1],
 				legend: config.get("plotting.legend"),
 				max_series: config.get("plotting.max_series_count"),
-				menus: config.get("plotting.menus"),
 			});
 		}
 	}
@@ -518,6 +557,9 @@ class PlotPanel {
 	private parse_dat(text: string): [string[], string[][]] {
 		let lines = text.split(/[\n\r]+/).filter(e => e.trim().length > 0);
 		let splt_lines = lines.map(w => w.trim().split(/\s+/));
+		if (splt_lines.length < 2) {
+			return [[], []];
+		}
 		let names = splt_lines[0].slice(1);
 		let data = splt_lines.slice(1);
 		let transposed = data[0].map((_, colIndex) => data.map(row => row[colIndex]));
@@ -529,12 +571,25 @@ class PlotPanel {
 		const uri = vscode.Uri.joinPath(folder, `${message.title}_${message.type}.${message.type === 'png' ? 'png' : 'svg'}`);
 		let data: Buffer;
 		if (message.type === 'png') {
-			data = Buffer.from(message.text.replace("data:image/png;base64,", ""), 'base64');
+			const prefix = "data:image/png;base64,";
+			if (!message.text.startsWith(prefix)) {
+				vscode.window.showErrorMessage("Invalid PNG data URI.");
+				return;
+			}
+			data = Buffer.from(message.text.slice(prefix.length), 'base64');
 		} else {
-			data = Buffer.from(decodeURIComponent(message.text).replace("data:image/svg+xml,", ""));
+			const prefix = "data:image/svg+xml,";
+			const decoded = decodeURIComponent(message.text);
+			if (!decoded.startsWith(prefix)) {
+				vscode.window.showErrorMessage("Invalid SVG data URI.");
+				return;
+			}
+			data = Buffer.from(decoded.slice(prefix.length));
 		}
 		vscode.workspace.fs.writeFile(uri, data).then(() => {
 			vscode.window.showInformationMessage(`Image saved to ${uri.fsPath}`);
+		}, (err) => {
+			vscode.window.showErrorMessage(`Failed to save image: ${err.message}`);
 		});
 	}
 
