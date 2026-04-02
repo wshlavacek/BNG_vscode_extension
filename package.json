@@ -29,7 +29,7 @@
         "package": "npm run check-types && node esbuild.js --production",
         "check-types": "tsc --noEmit",
         "lint": "eslint .",
-        "pretest": "npm run compile && npm run lint",
+        "pretest": "tsc -p . && node esbuild.js",
         "test": "node ./out/test/runTest.js"
     },
     "main": "./dist/extension.js",
@@ -112,7 +112,7 @@
                 "command": "bng.run_viz",
                 "title": "BNG: Visualize Network"
             },
-{
+            {
                 "command": "bng.webview",
                 "title": "BNG: Open Plot / Viewer"
             },
@@ -228,10 +228,13 @@
         }
     },
     "devDependencies": {
+        "@types/mocha": "^10.0.10",
         "@types/node": "^25.5.0",
         "@types/vscode": "^1.110.0",
+        "@vscode/test-electron": "^2.5.2",
         "esbuild": "^0.27.5",
         "glob": "^13.0.6",
+        "mocha": "^11.7.5",
         "typescript": "^6.0.2"
     }
 }
