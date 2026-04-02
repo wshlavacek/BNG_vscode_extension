@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
+import { LanguageClient, LanguageClientOptions, ServerOptions, TransportKind } from 'vscode-languageclient/node';
 import { ProcessManager, ProcessManagerProvider } from './utils/processManagement';
 import { PlotPanel } from './plotting/PlotPanel';
 import { createRunHandler, createVizHandler, createSetupHandler, createUpgradeHandler, CommandContext } from './commands/handlers';
@@ -7,7 +9,21 @@ import { bnglFoldingProvider } from './folding/foldingProvider';
 
 const PYBNG_VERSION = '0.5.0';
 
+let client: LanguageClient | undefined;
+
 export function activate(context: vscode.ExtensionContext) {
+	// Start the language server
+	const serverModule = context.asAbsolutePath(path.join('dist', 'server.js'));
+	const serverOptions: ServerOptions = {
+		run: { module: serverModule, transport: TransportKind.ipc },
+		debug: { module: serverModule, transport: TransportKind.ipc },
+	};
+	const clientOptions: LanguageClientOptions = {
+		documentSelector: [{ scheme: 'file', language: 'bngl' }],
+	};
+	client = new LanguageClient('bnglLanguageServer', 'BNGL Language Server', serverOptions, clientOptions);
+	client.start();
+	context.subscriptions.push({ dispose: () => { client?.stop(); } });
 	const processManager = new ProcessManager();
 	const channel = vscode.window.createOutputChannel('BNGL');
 
