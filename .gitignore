@@ -4,3 +4,4 @@ dev/
 dist/
 out/
 .vscode-test/
+.DS_Store
