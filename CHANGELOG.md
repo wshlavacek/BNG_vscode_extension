@@ -29,6 +29,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - `_save_image` validates data URI format and handles write errors
 - HTML injection in webview template: `fname` and `folder` are now escaped
 - Repository URLs updated from `RuleWorld` to `wshlavacek` across all files
+- Run and visualize commands now use the workspace Python interpreter (`python -m bionetgen`) instead of bare PATH lookup, fixing `ENOENT` and wrong-binary issues (RuleWorld/PyBioNetGen#62)
 
 ### Removed
 - Duplicate `bng.plot_dat` command (was identical to `bng.webview`)

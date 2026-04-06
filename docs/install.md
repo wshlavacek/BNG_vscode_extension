@@ -17,12 +17,12 @@ This is the recommended method when testing a version that hasn't been published
    npm install
    npx vsce package
    ```
-   This produces a file like `bngl-0.7.2.vsix`.
+   This produces a file like `bngl-0.8.0.vsix`.
 
 2. **Install the VSIX** in VS Code:
    - From the command line:
      ```
-     code --install-extension bngl-0.7.2.vsix
+     code --install-extension bngl-0.8.0.vsix
      ```
    - Or from VS Code: open the Extensions tab, click the `...` menu at the top, select **Install from VSIX...**, and choose the file.
 
