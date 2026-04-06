@@ -96,7 +96,8 @@ export function createRunHandler(ctx: CommandContext) {
         await vscode.workspace.fs.createDirectory(new_fold_uri);
         await vscode.workspace.fs.copy(editor.document.uri, copy_path);
 
-        const term_cmd = `bionetgen -req "${ctx.pybngVersion}" run -i "${copy_path.fsPath}" -o "${new_fold_uri.fsPath}" -l "${new_fold_uri.fsPath}"`;
+        const pythonPath = await getPythonPath(ctx.channel);
+        const term_cmd = `"${pythonPath}" -m bionetgen -req "${ctx.pybngVersion}" run -i "${copy_path.fsPath}" -o "${new_fold_uri.fsPath}" -l "${new_fold_uri.fsPath}"`;
         vscode.window.showInformationMessage(`Started running ${fname} in folder ${fname_noext}/${fold_name}`);
 
         if (config.get<boolean>('general.enable_terminal_runner')) {
@@ -116,7 +117,7 @@ export function createRunHandler(ctx: CommandContext) {
             }
         } else {
             ctx.channel.appendLine(term_cmd);
-            const process = spawnAsync('bionetgen', ['-req', ctx.pybngVersion, 'run', '-i', copy_path.fsPath, '-o', new_fold_uri.fsPath, '-l', new_fold_uri.fsPath], ctx.channel, ctx.processManager);
+            const process = spawnAsync(pythonPath, ['-m', 'bionetgen', '-req', ctx.pybngVersion, 'run', '-i', copy_path.fsPath, '-o', new_fold_uri.fsPath, '-l', new_fold_uri.fsPath], ctx.channel, ctx.processManager);
             process.then((exitCode) => {
                 if (exitCode) {
                     vscode.window.showInformationMessage('Something went wrong, see BNGL output channel for details.');
@@ -154,7 +155,8 @@ export function createVizHandler(ctx: CommandContext) {
         await vscode.workspace.fs.createDirectory(new_fold_uri);
         await vscode.workspace.fs.copy(editor.document.uri, copy_path);
 
-        const term_cmd = `bionetgen -req "${ctx.pybngVersion}" visualize -i "${copy_path.fsPath}" -o "${new_fold_uri.fsPath}" -t "all"`;
+        const pythonPath = await getPythonPath(ctx.channel);
+        const term_cmd = `"${pythonPath}" -m bionetgen -req "${ctx.pybngVersion}" visualize -i "${copy_path.fsPath}" -o "${new_fold_uri.fsPath}" -t "all"`;
         vscode.window.showInformationMessage(`Started visualizing ${fname} in folder ${fname_noext}/${fold_name}`);
 
         if (config.get<boolean>('general.enable_terminal_runner')) {
@@ -166,7 +168,7 @@ export function createVizHandler(ctx: CommandContext) {
             term.sendText(term_cmd);
         } else {
             ctx.channel.appendLine(term_cmd);
-            const exitCode = await spawnAsync('bionetgen', ['-req', ctx.pybngVersion, 'visualize', '-i', copy_path.fsPath, '-o', new_fold_uri.fsPath, '-t', 'all'], ctx.channel, ctx.processManager);
+            const exitCode = await spawnAsync(pythonPath, ['-m', 'bionetgen', '-req', ctx.pybngVersion, 'visualize', '-i', copy_path.fsPath, '-o', new_fold_uri.fsPath, '-t', 'all'], ctx.channel, ctx.processManager);
             if (exitCode) {
                 vscode.window.showInformationMessage('Something went wrong, see BNGL output channel for details.');
                 ctx.channel.show();
