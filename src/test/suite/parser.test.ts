@@ -1004,5 +1004,22 @@ suite('BNGL Parser', () => {
             assert.ok(doc.functions.length >= 10, 'Should have many functions');
             assert.ok(doc.rules.length >= 10, 'Should have many rules');
         });
+
+        test('parses nfkb model without errors', () => {
+            const modelPath = path.resolve(__dirname, '../../../examples/nfkb.bngl');
+            if (!fs.existsSync(modelPath)) {
+                return;
+            }
+            const text = fs.readFileSync(modelPath, 'utf-8');
+            const doc = parseBnglDocument(text);
+
+            const errors = doc.diagnostics.filter(d => d.severity === 'error');
+            assert.strictEqual(errors.length, 0, `Unexpected errors: ${errors.map(e => e.message).join(', ')}`);
+
+            assert.ok(doc.parameters.length >= 30, 'Should have many parameters');
+            assert.ok(doc.functions.length >= 3, 'Should have functions');
+            assert.ok(doc.seedSpecies.length >= 20, 'Should have many seed species');
+            assert.ok(doc.rules.length >= 15, 'Should have many rules');
+        });
     });
 });
