@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { spawnAsync } from '../utils/spawnAsync';
-import { getPythonPath } from '../utils/getPythonPath';
+import { getPythonCommand } from '../utils/getPythonPath';
+import { CommandSpec, appendCommandArgs, createCommandSpec, formatCommandSpec } from '../utils/commandSpec';
 import { ProcessManager } from '../utils/processManagement';
 import { PlotPanel } from '../plotting/PlotPanel';
 
@@ -11,6 +12,8 @@ export interface CommandContext {
     pybngVersion: string;
     extensionContext: vscode.ExtensionContext;
 }
+
+const PYBIONETGEN_ENTRYPOINT = 'from bionetgen.main import main as _bng_main; raise SystemExit(_bng_main())';
 
 function getTimestampedFolderName(): string {
     const d = new Date();
@@ -78,6 +81,14 @@ async function openGdat(folderUri: vscode.Uri, fnameNoext: string, extensionCont
     }
 }
 
+function createBionetgenCommand(pythonCommand: CommandSpec, pybngVersion: string, args: string[]): CommandSpec {
+    return appendCommandArgs(pythonCommand, ['-c', PYBIONETGEN_ENTRYPOINT, '-req', pybngVersion, ...args]);
+}
+
+function createPipCommand(pythonCommand: CommandSpec, args: string[]): CommandSpec {
+    return appendCommandArgs(pythonCommand, ['-m', 'pip', ...args]);
+}
+
 export function createRunHandler(ctx: CommandContext) {
     return async function runCommandHandler() {
         const editor = vscode.window.activeTextEditor;
@@ -96,8 +107,9 @@ export function createRunHandler(ctx: CommandContext) {
         await vscode.workspace.fs.createDirectory(new_fold_uri);
         await vscode.workspace.fs.copy(editor.document.uri, copy_path);
 
-        const pythonPath = await getPythonPath(ctx.channel);
-        const term_cmd = `"${pythonPath}" -m bionetgen -req "${ctx.pybngVersion}" run -i "${copy_path.fsPath}" -o "${new_fold_uri.fsPath}" -l "${new_fold_uri.fsPath}"`;
+        const pythonCommand = await getPythonCommand(ctx.channel);
+        const runCommand = createBionetgenCommand(pythonCommand, ctx.pybngVersion, ['run', '-i', copy_path.fsPath, '-o', new_fold_uri.fsPath, '-l', new_fold_uri.fsPath]);
+        const term_cmd = formatCommandSpec(runCommand);
         vscode.window.showInformationMessage(`Started running ${fname} in folder ${fname_noext}/${fold_name}`);
 
         if (config.get<boolean>('general.enable_terminal_runner')) {
@@ -117,9 +129,9 @@ export function createRunHandler(ctx: CommandContext) {
             }
         } else {
             ctx.channel.appendLine(term_cmd);
-            const process = spawnAsync(pythonPath, ['-m', 'bionetgen', '-req', ctx.pybngVersion, 'run', '-i', copy_path.fsPath, '-o', new_fold_uri.fsPath, '-l', new_fold_uri.fsPath], ctx.channel, ctx.processManager);
+            const process = spawnAsync(runCommand, ctx.channel, ctx.processManager);
             process.then((exitCode) => {
-                if (exitCode) {
+                if (exitCode !== 0) {
                     vscode.window.showInformationMessage('Something went wrong, see BNGL output channel for details.');
                     ctx.channel.show();
                 } else {
@@ -155,8 +167,9 @@ export function createVizHandler(ctx: CommandContext) {
         await vscode.workspace.fs.createDirectory(new_fold_uri);
         await vscode.workspace.fs.copy(editor.document.uri, copy_path);
 
-        const pythonPath = await getPythonPath(ctx.channel);
-        const term_cmd = `"${pythonPath}" -m bionetgen -req "${ctx.pybngVersion}" visualize -i "${copy_path.fsPath}" -o "${new_fold_uri.fsPath}" -t "all"`;
+        const pythonCommand = await getPythonCommand(ctx.channel);
+        const vizCommand = createBionetgenCommand(pythonCommand, ctx.pybngVersion, ['visualize', '-i', copy_path.fsPath, '-o', new_fold_uri.fsPath, '-t', 'all']);
+        const term_cmd = formatCommandSpec(vizCommand);
         vscode.window.showInformationMessage(`Started visualizing ${fname} in folder ${fname_noext}/${fold_name}`);
 
         if (config.get<boolean>('general.enable_terminal_runner')) {
@@ -168,8 +181,8 @@ export function createVizHandler(ctx: CommandContext) {
             term.sendText(term_cmd);
         } else {
             ctx.channel.appendLine(term_cmd);
-            const exitCode = await spawnAsync(pythonPath, ['-m', 'bionetgen', '-req', ctx.pybngVersion, 'visualize', '-i', copy_path.fsPath, '-o', new_fold_uri.fsPath, '-t', 'all'], ctx.channel, ctx.processManager);
-            if (exitCode) {
+            const exitCode = await spawnAsync(vizCommand, ctx.channel, ctx.processManager);
+            if (exitCode !== 0) {
                 vscode.window.showInformationMessage('Something went wrong, see BNGL output channel for details.');
                 ctx.channel.show();
             } else {
@@ -194,9 +207,9 @@ export function createVizHandler(ctx: CommandContext) {
 export function createSetupHandler(ctx: CommandContext) {
     return async function setupCommandHandler() {
         ctx.channel.appendLine('Checking for perl.');
-        const perlCheckExitCode = await spawnAsync('perl', ['-v'], ctx.channel, ctx.processManager);
+        const perlCheckExitCode = await spawnAsync(createCommandSpec('perl', ['-v']), ctx.channel, ctx.processManager);
 
-        if (perlCheckExitCode) {
+        if (perlCheckExitCode !== 0) {
             ctx.channel.appendLine('Could not find perl.');
             vscode.window.showInformationMessage('You must install Perl (https://www.perl.org/get.html). We recommend Strawberry Perl for Windows.');
             ctx.channel.show();
@@ -205,22 +218,22 @@ export function createSetupHandler(ctx: CommandContext) {
         }
 
         ctx.channel.appendLine('Getting python path.');
-        const pythonPath = await getPythonPath(ctx.channel);
-        ctx.channel.appendLine('Found python path: ' + pythonPath);
+        const pythonCommand = await getPythonCommand(ctx.channel);
+        ctx.channel.appendLine('Found python command: ' + formatCommandSpec(pythonCommand));
 
         ctx.channel.appendLine('Checking for bionetgen.');
-        const bngCheckExitCode = await spawnAsync(pythonPath, ['-m', 'pip', 'show', 'bionetgen'], ctx.channel, ctx.processManager);
+        const bngCheckExitCode = await spawnAsync(createPipCommand(pythonCommand, ['show', 'bionetgen']), ctx.channel, ctx.processManager);
 
-        if (bngCheckExitCode) {
-            ctx.channel.appendLine('Installing PyBNG for python: ' + pythonPath);
-            vscode.window.showInformationMessage('Setting up BNG for the following Python: ' + pythonPath);
-            const installExitCode = await spawnAsync(pythonPath, ['-m', 'pip', 'install', 'bionetgen', '--upgrade'], ctx.channel, ctx.processManager);
-            if (installExitCode) {
-                ctx.channel.appendLine('pip install failed for python: ' + pythonPath);
+        if (bngCheckExitCode !== 0) {
+            ctx.channel.appendLine('Installing PyBNG for python command: ' + formatCommandSpec(pythonCommand));
+            vscode.window.showInformationMessage(`Setting up BNG for Python: ${pythonCommand.command}`);
+            const installExitCode = await spawnAsync(createPipCommand(pythonCommand, ['install', 'bionetgen', '--upgrade']), ctx.channel, ctx.processManager);
+            if (installExitCode !== 0) {
+                ctx.channel.appendLine('pip install failed for python command: ' + formatCommandSpec(pythonCommand));
                 vscode.window.showInformationMessage('BNG setup failed, see BNGL output channel for details.');
                 ctx.channel.show();
             } else {
-                ctx.channel.appendLine('pip install succeeded for python: ' + pythonPath);
+                ctx.channel.appendLine('pip install succeeded for python command: ' + formatCommandSpec(pythonCommand));
                 vscode.window.showInformationMessage('BNG setup complete.');
             }
         } else {
@@ -232,16 +245,16 @@ export function createSetupHandler(ctx: CommandContext) {
 export function createUpgradeHandler(ctx: CommandContext) {
     return async function upgradeCommandHandler() {
         ctx.channel.appendLine('Running BNG upgrade ...');
-        const pythonPath = await getPythonPath(ctx.channel);
-        ctx.channel.appendLine('Found python path: ' + pythonPath);
-        vscode.window.showInformationMessage('Upgrading BNG for the following Python: ' + pythonPath);
-        const upgradeExitCode = await spawnAsync(pythonPath, ['-m', 'pip', 'install', 'bionetgen', '--upgrade'], ctx.channel, ctx.processManager);
-        if (upgradeExitCode) {
-            ctx.channel.appendLine('pip upgrade failed for python: ' + pythonPath);
+        const pythonCommand = await getPythonCommand(ctx.channel);
+        ctx.channel.appendLine('Found python command: ' + formatCommandSpec(pythonCommand));
+        vscode.window.showInformationMessage(`Upgrading BNG for Python: ${pythonCommand.command}`);
+        const upgradeExitCode = await spawnAsync(createPipCommand(pythonCommand, ['install', 'bionetgen', '--upgrade']), ctx.channel, ctx.processManager);
+        if (upgradeExitCode !== 0) {
+            ctx.channel.appendLine('pip upgrade failed for python command: ' + formatCommandSpec(pythonCommand));
             vscode.window.showInformationMessage('BNG upgrade failed, see BNGL output channel for details.');
             ctx.channel.show();
         } else {
-            ctx.channel.appendLine('pip upgrade successful for python: ' + pythonPath);
+            ctx.channel.appendLine('pip upgrade successful for python command: ' + formatCommandSpec(pythonCommand));
             vscode.window.showInformationMessage('BNG upgrade complete.');
         }
     };

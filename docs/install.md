@@ -1,6 +1,6 @@
 ## Installation
 
-Download and install [VS Code](https://code.visualstudio.com). There are three ways to install this extension:
+Download and install [VS Code](https://code.visualstudio.com) 1.82 or newer. There are three ways to install this extension:
 
 ### 1. From the VS Code Marketplace
 
@@ -12,7 +12,7 @@ This is the recommended method when testing a version that hasn't been published
 
 1. **Build the VSIX** (or obtain one from the developer):
    ```
-   git clone https://github.com/wshlavacek/BNG_vscode_extension.git
+   git clone https://github.com/RuleWorld/BNG_vscode_extension.git
    cd BNG_vscode_extension
    npm install
    npx vsce package
@@ -34,7 +34,7 @@ Use this when actively developing the extension.
 
 1. Clone and build:
    ```
-   git clone https://github.com/wshlavacek/BNG_vscode_extension.git
+   git clone https://github.com/RuleWorld/BNG_vscode_extension.git
    cd BNG_vscode_extension
    npm install
    ```

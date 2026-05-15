@@ -22,20 +22,23 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Folding provider: `splice(j)` was removing too many stack entries, breaking nested block folding
 - `bng.setup` auto-install now runs after all commands are registered (was silently failing)
 - `getPythonPath` no longer crashes when the Python extension's `featureFlags` property is missing
+- Python commands now preserve interpreter arguments returned by the Python extension instead of flattening them into a single string
 - `parse_dat` no longer crashes on empty or header-only data files
 - `_send_figure_data` now uses async `vscode.workspace.fs.readFile` instead of blocking `fs.readFileSync`
 - `_getProcessList` buffers all stdout before parsing, fixing data loss from split chunks
 - `checkGdat` watcher race condition: now checks for existing files before waiting
 - `_save_image` validates data URI format and handles write errors
 - HTML injection in webview template: `fname` and `folder` are now escaped
-- Repository URLs updated from `RuleWorld` to `wshlavacek` across all files
-- Run and visualize commands now use the workspace Python interpreter (`python -m bionetgen`) instead of bare PATH lookup, fixing `ENOENT` and wrong-binary issues (RuleWorld/PyBioNetGen#62)
+- `spawnAsync` now treats launch failures and missing exit codes as errors instead of reporting false success
+- VS Code extension tests now run in an isolated temporary workspace with auto-install disabled
+- Run and visualize commands now use the selected Python interpreter to invoke the PyBioNetGen CLI, fixing `ENOENT`, wrong-binary issues, and current PyBioNetGen installations that do not support `python -m bionetgen` (RuleWorld/PyBioNetGen#62)
 
 ### Removed
 - Duplicate `bng.plot_dat` command (was identical to `bng.webview`)
 - Unused `bngl.plotting.menus` configuration setting
 - `.graphml` from BNGL language registration (was hijacking all GraphML files)
 - `dist/` removed from git tracking (built at publish time via `vscode:prepublish`)
+- Broken `npm run lint` expectation and stale ESLint config
 - Unused variables in `media/main.js` (`oldState`, `plot_initialized`, `current_plot_names`, `current_colors`, `updates`)
 - jQuery no longer loaded for plot views (only needed for GraphML)
 - TODO comment removed from `docs/install.md`

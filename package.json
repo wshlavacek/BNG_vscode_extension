@@ -2,7 +2,11 @@
     "publisher": "als251",
     "repository": {
         "type": "git",
-        "url": "https://github.com/wshlavacek/BNG_vscode_extension"
+        "url": "https://github.com/RuleWorld/BNG_vscode_extension"
+    },
+    "homepage": "https://github.com/RuleWorld/BNG_vscode_extension#readme",
+    "bugs": {
+        "url": "https://github.com/RuleWorld/BNG_vscode_extension/issues"
     },
     "icon": "assets/flagman.png",
     "galleryBanner": {
@@ -14,7 +18,7 @@
     "description": "BNG language extension for vscode",
     "version": "0.8.0",
     "engines": {
-        "vscode": "^1.52.0"
+        "vscode": "^1.82.0"
     },
     "categories": [
         "Programming Languages",
@@ -28,9 +32,10 @@
         "watch": "node esbuild.js --watch",
         "package": "npm run check-types && node esbuild.js --production",
         "check-types": "tsc --noEmit",
-        "lint": "eslint .",
-        "pretest": "tsc -p . && node esbuild.js",
-        "test": "node ./out/test/runTest.js",
+        "test:prepare": "tsc -p . && node esbuild.js",
+        "test": "npm run test:extension",
+        "test:all": "npm test && npm run test:grammar",
+        "test:extension": "npm run test:prepare && node ./out/test/runTest.js",
         "test:grammar": "npx vscode-tmgrammar-test -g syntaxes/bngl.tmLanguage.json \"src/test/grammar/*.bngl\""
     },
     "main": "./dist/extension.js",

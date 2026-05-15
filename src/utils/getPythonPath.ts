@@ -1,80 +1,70 @@
 import * as vscode from 'vscode';
+import { CommandSpec, createCommandSpec } from './commandSpec';
 
-// get path to the python interpreter to be used for installing bionetgen, write relevant info to output channel
-export async function getPythonPath(channel?: vscode.OutputChannel): Promise<string> {
-    // if no particular path can be found, return defaultPath
-    const defaultPath = "python";
+function getActiveResource(): vscode.Uri | undefined {
+    return vscode.window.activeTextEditor?.document.uri;
+}
 
+// get the Python command to be used for installing bionetgen, write relevant info to output channel
+export async function getPythonCommand(channel?: vscode.OutputChannel): Promise<CommandSpec> {
+    const defaultCommand = createCommandSpec('python');
     const pythonExt = vscode.extensions.getExtension('ms-python.python');
-    if (typeof pythonExt === 'undefined') {
+    if (!pythonExt) {
         if (channel) {
-            channel.appendLine("Python extension undefined.");
+            channel.appendLine('Python extension undefined.');
         }
-        return defaultPath;
+        return defaultCommand;
     }
 
-    const flagValue = pythonExt.packageJSON?.featureFlags?.usingNewInterpreterStorage;
-
-    if (flagValue) {
-        if (!pythonExt.isActive) {
-            try {
-                await pythonExt.activate();
-            } catch (e: any) {
-                if (channel) {
-                    channel.appendLine("Python extension could not be activated.");
-                    channel.appendLine(e);
-                }
-                return defaultPath;
-            }
-        }
-
-        let doc = vscode.window.activeTextEditor;
-        let resource: vscode.Uri | undefined = undefined;
-        if (doc) {
-            resource = doc.document.uri;
-        }
-
-        let executionDetails;
-        if (resource) {
-            executionDetails = pythonExt.exports.settings.getExecutionDetails(resource);
-        }
-        else {
-            executionDetails = pythonExt.exports.settings.getExecutionDetails();
-        }
-
-        const execCommand = executionDetails?.["execCommand"] as string[] | undefined;
-
-        if (execCommand && execCommand.length > 0) {
-            return execCommand.join(" ");
-        }
-        else {
+    if (!pythonExt.isActive) {
+        try {
+            await pythonExt.activate();
+        } catch (e: any) {
             if (channel) {
-                channel.appendLine("pythonPath undefined, attempting to retrieve defaultInterpreterPath.");
+                channel.appendLine('Python extension could not be activated.');
+                channel.appendLine(String(e));
             }
-
-            const defaultInterpreterPath = vscode.workspace.getConfiguration("python").get<string>("defaultInterpreterPath");
-
-            if (defaultInterpreterPath) {
-                return defaultInterpreterPath;
-            }
-            else {
-                if (channel) {
-                    channel.appendLine("defaultInterpreterPath undefined.");
-                }
-                return defaultPath;
-            }
+            return defaultCommand;
         }
-	} else {
-		const pythonPath = vscode.workspace.getConfiguration("python").get<string>("pythonPath");
+    }
 
-        if (pythonPath) {
-            return pythonPath;
+    const resource = getActiveResource();
+    const getExecutionDetails = pythonExt.exports?.settings?.getExecutionDetails;
+    if (typeof getExecutionDetails === 'function') {
+        const executionDetails = resource ? getExecutionDetails(resource) : getExecutionDetails();
+        const execCommand = executionDetails?.execCommand as string[] | undefined;
+
+        if (execCommand?.length) {
+            return createCommandSpec(execCommand[0], execCommand.slice(1));
         }
-        else {
-            if (channel) {
-                channel.appendLine("pythonPath undefined.");
-            }
-            return defaultPath;
+
+        if (channel) {
+            channel.appendLine('Python execution details did not include execCommand.');
         }
-	}
+    }
+
+    const pythonConfig = vscode.workspace.getConfiguration('python', resource);
+    const defaultInterpreterPath = pythonConfig.get<string>('defaultInterpreterPath');
+    if (defaultInterpreterPath) {
+        return createCommandSpec(defaultInterpreterPath);
+    }
+
+    if (channel) {
+        channel.appendLine('defaultInterpreterPath undefined, attempting to retrieve legacy pythonPath.');
+    }
+
+    const pythonPath = pythonConfig.get<string>('pythonPath');
+    if (pythonPath) {
+        return createCommandSpec(pythonPath);
+    }
+
+    if (channel) {
+        channel.appendLine('pythonPath undefined.');
+    }
+
+    return defaultCommand;
+}
+
+export async function getPythonPath(channel?: vscode.OutputChannel): Promise<string> {
+    return (await getPythonCommand(channel)).command;
 }

@@ -8,7 +8,7 @@ This VS Code extension is designed to help write BNGL models by adding syntax hi
 
 Once the extension is installed you can create a new file with ```.bngl```. This file extension will be automatically detected and you should see the BioNetGen icon in the editor title bar if the extension is running correctly. This extension will also do syntax highlighing on files with ```.net``` extension. 
 
-Next you can start writing your model. This VS Code extension supports a large list of snippets that can help you write your model. For a full list, see [here](https://github.com/wshlavacek/BNG_vscode_extension/blob/main/snippets/bngl-snippets.json), we will update this with a snippet guide in the future. 
+Next you can start writing your model. This VS Code extension supports a large list of snippets that can help you write your model. For a full list, see [here](https://github.com/RuleWorld/BNG_vscode_extension/blob/main/snippets/bngl-snippets.json), we will update this with a snippet guide in the future. 
 
 ### Using the correct theme
 

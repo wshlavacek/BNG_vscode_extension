@@ -22,7 +22,7 @@ files with ``.net`` extension.
 
 Next you can start writing your model. This VS Code extension supports a large list of snippets
 that can help you write your model. For a full list, see
-`here <https://github.com/wshlavacek/BNG_vscode_extension/blob/main/snippets/bngl-snippets.json>`_.
+`here <https://github.com/RuleWorld/BNG_vscode_extension/blob/main/snippets/bngl-snippets.json>`_.
 
 Using the correct theme
 =======================

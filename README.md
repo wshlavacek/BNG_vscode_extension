@@ -30,6 +30,7 @@ A [VS Code](https://code.visualstudio.com/) extension for the [BioNetGen](http:/
 
 The editing features (highlighting, diagnostics, autocomplete, navigation) work out of the box. To run simulations and visualizations you also need:
 
+* VS Code 1.82 or newer
 * [Python 3](https://www.python.org/) (we recommend [Anaconda](https://docs.anaconda.com/anaconda/))
 * [PyBioNetGen](https://github.com/RuleWorld/PyBioNetGen) (`pip install bionetgen`)
 * Perl (Windows users: `conda install -c conda-forge perl`)
@@ -133,7 +134,7 @@ npm run watch   # start build in watch mode
 # Press F5 to launch the Extension Development Host
 ```
 
-Please submit issues and feature requests at [GitHub](https://github.com/wshlavacek/BNG_vscode_extension/issues).
+Please submit issues and feature requests at [GitHub](https://github.com/RuleWorld/BNG_vscode_extension/issues).
 
 ## Resources
 
