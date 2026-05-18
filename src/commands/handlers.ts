@@ -5,6 +5,14 @@ import { getPythonCommand } from '../utils/getPythonPath';
 import { CommandSpec, appendCommandArgs, createCommandSpec, formatCommandSpec } from '../utils/commandSpec';
 import { ProcessManager } from '../utils/processManagement';
 import { PlotPanel } from '../plotting/PlotPanel';
+import {
+    getModelFolderUri,
+    getResultsBaseFolderUri,
+    getResultsFolderConfigurationTarget,
+    getResultsRootFolderName,
+    getResultsRootUri,
+    getResultsRunFolderUri,
+} from '../resultsFolders';
 
 export interface CommandContext {
     processManager: ProcessManager;
@@ -13,22 +21,17 @@ export interface CommandContext {
     extensionContext: vscode.ExtensionContext;
 }
 
+type VisualizationType = 'all' | 'contactmap';
+
+interface ResultsFolderMenuItem extends vscode.QuickPickItem {
+    action: 'default' | 'workspace' | 'choose';
+}
+
 const PYBIONETGEN_ENTRYPOINT = 'from bionetgen.main import main as _bng_main; raise SystemExit(_bng_main())';
 
 function getTimestampedFolderName(): string {
     const d = new Date();
     return `${d.getFullYear()}_${(d.getMonth() + 1).toString().padStart(2, '0')}_${d.getDate().toString().padStart(2, '0')}__${d.getHours().toString().padStart(2, '0')}_${d.getMinutes().toString().padStart(2, '0')}_${d.getSeconds().toString().padStart(2, '0')}`;
-}
-
-function getOutputFolderUri(config: vscode.WorkspaceConfiguration, docUri: vscode.Uri): vscode.Uri {
-    const def_folder = config.get<string | null>('general.result_folder');
-    if (def_folder) {
-        return vscode.Uri.file(def_folder);
-    }
-    if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
-        return vscode.workspace.workspaceFolders[0].uri;
-    }
-    return vscode.Uri.file(path.dirname(docUri.fsPath));
 }
 
 async function checkGdat(outDir: string, timeout: number): Promise<void> {
@@ -57,7 +60,7 @@ async function checkGdat(outDir: string, timeout: number): Promise<void> {
     });
 }
 
-async function openGdat(folderUri: vscode.Uri, fnameNoext: string, extensionContext: vscode.ExtensionContext) {
+async function openGdat(folderUri: vscode.Uri, fnameNoext: string, extensionContext: vscode.ExtensionContext, targetColumn?: vscode.ViewColumn) {
     const files = await vscode.workspace.fs.readDirectory(folderUri);
     let outGdatUri: vscode.Uri | undefined;
 
@@ -76,8 +79,7 @@ async function openGdat(folderUri: vscode.Uri, fnameNoext: string, extensionCont
     }
 
     if (outGdatUri) {
-        await vscode.commands.executeCommand('vscode.open', outGdatUri);
-        PlotPanel.create(extensionContext.extensionUri);
+        PlotPanel.create(extensionContext.extensionUri, outGdatUri, targetColumn);
     }
 }
 
@@ -89,19 +91,173 @@ function createPipCommand(pythonCommand: CommandSpec, args: string[]): CommandSp
     return appendCommandArgs(pythonCommand, ['-m', 'pip', ...args]);
 }
 
+function getVisualizationCommandLabel(visualizationType: VisualizationType): string {
+    return visualizationType === 'contactmap' ? 'contact map' : 'visualization graphs';
+}
+
+function getCommandTargetUri(target?: unknown): vscode.Uri | undefined {
+    if (target instanceof vscode.Uri) {
+        return target;
+    }
+
+    if (typeof target === 'string' && target.length > 0) {
+        return vscode.Uri.file(target);
+    }
+
+    if (target && typeof target === 'object' && 'fsPath' in target) {
+        const fsPath = (target as { fsPath?: unknown }).fsPath;
+        if (typeof fsPath === 'string' && fsPath.length > 0) {
+            return vscode.Uri.file(fsPath);
+        }
+    }
+
+    return vscode.window.activeTextEditor?.document.uri;
+}
+
+function getBnglTargetUri(target?: unknown): vscode.Uri | undefined {
+    const targetUri = getCommandTargetUri(target);
+    if (!targetUri) {
+        return undefined;
+    }
+
+    return path.extname(targetUri.fsPath).toLowerCase() === '.bngl' ? targetUri : undefined;
+}
+
+function getRunFolderLabel(runFolderUri: vscode.Uri): string {
+    return `${path.basename(path.dirname(runFolderUri.fsPath))}/${path.basename(runFolderUri.fsPath)}`;
+}
+
+function describeRunFolder(runFolderUri: vscode.Uri): string {
+    return `${getRunFolderLabel(runFolderUri)} (${runFolderUri.fsPath})`;
+}
+
+function isSamePath(leftPath: string, rightPath: string): boolean {
+    return path.resolve(leftPath) === path.resolve(rightPath);
+}
+
+async function updateResultsFolderSetting(docUri: vscode.Uri, folderPath: string | null): Promise<vscode.WorkspaceConfiguration> {
+    const config = vscode.workspace.getConfiguration('bngl', docUri);
+    const target = getResultsFolderConfigurationTarget(docUri);
+    await config.update('general.result_folder', folderPath, target);
+    return vscode.workspace.getConfiguration('bngl', docUri);
+}
+
+async function chooseCustomResultsFolder(docUri: vscode.Uri): Promise<vscode.Uri | undefined> {
+    const config = vscode.workspace.getConfiguration('bngl', docUri);
+    const currentBaseFolderUri = getResultsBaseFolderUri(config, docUri);
+    const selection = await vscode.window.showOpenDialog({
+        canSelectFiles: false,
+        canSelectFolders: true,
+        canSelectMany: false,
+        defaultUri: currentBaseFolderUri,
+        openLabel: 'Use Results Folder'
+    });
+
+    return selection?.[0];
+}
+
+function getVisualizationOutputMatcher(visualizationType: VisualizationType) {
+    if (visualizationType === 'contactmap') {
+        return (name: string) => name.toLowerCase().endsWith('_contactmap.graphml') || name.toLowerCase().includes('contactmap');
+    }
+
+    return (name: string) => name.toLowerCase().endsWith('.graphml');
+}
+
+async function openVisualizationOutputs(
+    folderUri: vscode.Uri,
+    visualizationType: VisualizationType,
+    extensionContext: vscode.ExtensionContext,
+    channel: vscode.OutputChannel,
+    targetColumn?: vscode.ViewColumn
+) {
+    const files = await vscode.workspace.fs.readDirectory(folderUri);
+    const matches = files
+        .map(([name]) => name)
+        .filter(getVisualizationOutputMatcher(visualizationType))
+        .sort((left, right) => left.localeCompare(right));
+
+    if (matches.length === 0) {
+        channel.appendLine(`No GraphML output matched visualization type "${visualizationType}" in ${folderUri.fsPath}`);
+        return;
+    }
+
+    for (const name of matches) {
+        const graphmlUri = vscode.Uri.joinPath(folderUri, name);
+        PlotPanel.create(extensionContext.extensionUri, graphmlUri, targetColumn);
+    }
+}
+
+function createVisualizationHandler(ctx: CommandContext, visualizationType: VisualizationType) {
+    return async function vizCommandHandler() {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) return;
+        const docUri = editor.document.uri;
+        const fname = path.basename(docUri.fsPath);
+        const sourceColumn = editor.viewColumn;
+
+        const config = vscode.workspace.getConfiguration('bngl', docUri);
+        const fold_name = getTimestampedFolderName();
+        const new_fold_uri = getResultsRunFolderUri(config, docUri, fold_name);
+        const copy_path = vscode.Uri.joinPath(new_fold_uri, fname);
+
+        await vscode.workspace.fs.createDirectory(new_fold_uri);
+        await vscode.workspace.fs.copy(editor.document.uri, copy_path);
+
+        const pythonCommand = await getPythonCommand(ctx.channel);
+        const vizCommand = createBionetgenCommand(pythonCommand, ctx.pybngVersion, [
+            'visualize',
+            '-i',
+            copy_path.fsPath,
+            '-o',
+            new_fold_uri.fsPath,
+            '-t',
+            visualizationType
+        ]);
+        const term_cmd = formatCommandSpec(vizCommand);
+        const commandLabel = getVisualizationCommandLabel(visualizationType);
+        ctx.channel.appendLine(`Visualization results folder: ${new_fold_uri.fsPath}`);
+        vscode.window.showInformationMessage(`Started generating ${commandLabel} for ${fname} in ${describeRunFolder(new_fold_uri)}`);
+
+        if (config.get<boolean>('general.enable_terminal_runner')) {
+            let term = vscode.window.terminals.find(i => i.name === 'bngl_term');
+            if (!term) {
+                term = vscode.window.createTerminal('bngl_term');
+            }
+            term.show();
+            term.sendText(term_cmd);
+            return;
+        }
+
+        ctx.channel.appendLine(term_cmd);
+        const exitCode = await spawnAsync(vizCommand, ctx.channel, ctx.processManager);
+        if (exitCode !== 0) {
+            vscode.window.showInformationMessage('Something went wrong, see BNGL output channel for details.');
+            ctx.channel.show();
+            return;
+        }
+
+        vscode.window.showInformationMessage(`Finished generating ${commandLabel}. Results are in ${describeRunFolder(new_fold_uri)}`);
+        try {
+            await openVisualizationOutputs(new_fold_uri, visualizationType, ctx.extensionContext, ctx.channel, sourceColumn);
+        } catch (err) {
+            ctx.channel.appendLine(`Could not open visualization files: ${err}`);
+        }
+    };
+}
+
 export function createRunHandler(ctx: CommandContext) {
     return async function runCommandHandler() {
         const editor = vscode.window.activeTextEditor;
         if (!editor) return;
         const docUri = editor.document.uri;
         const fname = path.basename(docUri.fsPath);
+        const sourceColumn = editor.viewColumn;
 
-        const config = vscode.workspace.getConfiguration('bngl');
-        const curr_workspace_uri = getOutputFolderUri(config, docUri);
-
-        const fname_noext = fname.endsWith('.bngl') ? fname.slice(0, -5) : fname;
+        const config = vscode.workspace.getConfiguration('bngl', docUri);
+        const fname_noext = path.basename(docUri.fsPath, path.extname(docUri.fsPath));
         const fold_name = getTimestampedFolderName();
-        const new_fold_uri = vscode.Uri.joinPath(curr_workspace_uri, fname_noext, fold_name);
+        const new_fold_uri = getResultsRunFolderUri(config, docUri, fold_name);
         const copy_path = vscode.Uri.joinPath(new_fold_uri, fname);
 
         await vscode.workspace.fs.createDirectory(new_fold_uri);
@@ -110,7 +266,8 @@ export function createRunHandler(ctx: CommandContext) {
         const pythonCommand = await getPythonCommand(ctx.channel);
         const runCommand = createBionetgenCommand(pythonCommand, ctx.pybngVersion, ['run', '-i', copy_path.fsPath, '-o', new_fold_uri.fsPath, '-l', new_fold_uri.fsPath]);
         const term_cmd = formatCommandSpec(runCommand);
-        vscode.window.showInformationMessage(`Started running ${fname} in folder ${fname_noext}/${fold_name}`);
+        ctx.channel.appendLine(`Simulation results folder: ${new_fold_uri.fsPath}`);
+        vscode.window.showInformationMessage(`Started running ${fname} in ${describeRunFolder(new_fold_uri)}`);
 
         if (config.get<boolean>('general.enable_terminal_runner')) {
             let term = vscode.window.terminals.find(i => i.name === 'bngl_term');
@@ -122,7 +279,7 @@ export function createRunHandler(ctx: CommandContext) {
 
             if (config.get<boolean>('general.auto_open')) {
                 checkGdat(new_fold_uri.fsPath, 120000).then(() => {
-                    openGdat(new_fold_uri, fname_noext, ctx.extensionContext);
+                    openGdat(new_fold_uri, fname_noext, ctx.extensionContext, sourceColumn);
                 }).catch((err) => {
                     ctx.channel.appendLine(`Error auto-opening GDAT: ${err}`);
                 });
@@ -135,9 +292,9 @@ export function createRunHandler(ctx: CommandContext) {
                     vscode.window.showInformationMessage('Something went wrong, see BNGL output channel for details.');
                     ctx.channel.show();
                 } else {
-                    vscode.window.showInformationMessage('Finished running successfully.');
+                    vscode.window.showInformationMessage(`Finished running ${fname}. Results are in ${describeRunFolder(new_fold_uri)}`);
                     if (config.get<boolean>('general.auto_open')) {
-                        openGdat(new_fold_uri, fname_noext, ctx.extensionContext).catch(err => {
+                        openGdat(new_fold_uri, fname_noext, ctx.extensionContext, sourceColumn).catch(err => {
                             ctx.channel.appendLine(`Error auto-opening GDAT: ${err}`);
                         });
                     }
@@ -150,56 +307,98 @@ export function createRunHandler(ctx: CommandContext) {
 }
 
 export function createVizHandler(ctx: CommandContext) {
-    return async function vizCommandHandler() {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) return;
-        const docUri = editor.document.uri;
-        const fname = path.basename(docUri.fsPath);
+    return createVisualizationHandler(ctx, 'all');
+}
 
-        const config = vscode.workspace.getConfiguration('bngl');
-        const curr_workspace_uri = getOutputFolderUri(config, docUri);
+export function createContactMapHandler(ctx: CommandContext) {
+    return createVisualizationHandler(ctx, 'contactmap');
+}
 
-        const fname_noext = fname.endsWith('.bngl') ? fname.slice(0, -5) : fname;
-        const fold_name = getTimestampedFolderName();
-        const new_fold_uri = vscode.Uri.joinPath(curr_workspace_uri, fname_noext, fold_name);
-        const copy_path = vscode.Uri.joinPath(new_fold_uri, fname);
+export function createResultsFolderHandler(ctx: CommandContext) {
+    return async function resultsFolderCommandHandler() {
+        const docUri = getBnglTargetUri();
+        if (!docUri) {
+            vscode.window.showInformationMessage('Open a BNGL model to manage its results folder.');
+            return;
+        }
 
-        await vscode.workspace.fs.createDirectory(new_fold_uri);
-        await vscode.workspace.fs.copy(editor.document.uri, copy_path);
+        const config = vscode.workspace.getConfiguration('bngl', docUri);
+        const modelFileName = path.basename(docUri.fsPath);
+        const modelFolderUri = getModelFolderUri(docUri);
+        const workspaceFolderUri = vscode.workspace.getWorkspaceFolder(docUri)?.uri;
+        const currentRootUri = getResultsRootUri(config, docUri);
+        const defaultRootUri = vscode.Uri.joinPath(modelFolderUri, getResultsRootFolderName(docUri.fsPath));
 
-        const pythonCommand = await getPythonCommand(ctx.channel);
-        const vizCommand = createBionetgenCommand(pythonCommand, ctx.pybngVersion, ['visualize', '-i', copy_path.fsPath, '-o', new_fold_uri.fsPath, '-t', 'all']);
-        const term_cmd = formatCommandSpec(vizCommand);
-        vscode.window.showInformationMessage(`Started visualizing ${fname} in folder ${fname_noext}/${fold_name}`);
-
-        if (config.get<boolean>('general.enable_terminal_runner')) {
-            let term = vscode.window.terminals.find(i => i.name === 'bngl_term');
-            if (!term) {
-                term = vscode.window.createTerminal('bngl_term');
+        const items: ResultsFolderMenuItem[] = [
+            {
+                label: 'Use model\'s folder (Default)',
+                description: 'Write results beside the current model.',
+                detail: `Results root: ${defaultRootUri.fsPath}`,
+                action: 'default'
             }
-            term.show();
-            term.sendText(term_cmd);
-        } else {
-            ctx.channel.appendLine(term_cmd);
-            const exitCode = await spawnAsync(vizCommand, ctx.channel, ctx.processManager);
-            if (exitCode !== 0) {
-                vscode.window.showInformationMessage('Something went wrong, see BNGL output channel for details.');
-                ctx.channel.show();
-            } else {
-                vscode.window.showInformationMessage('Finished visualizing successfully.');
-                try {
-                    const files = await vscode.workspace.fs.readDirectory(new_fold_uri);
-                    for (const [name] of files) {
-                        if (name.endsWith('.graphml')) {
-                            const graphmlUri = vscode.Uri.joinPath(new_fold_uri, name);
-                            await vscode.commands.executeCommand('vscode.open', graphmlUri);
-                            PlotPanel.create(ctx.extensionContext.extensionUri);
-                        }
-                    }
-                } catch (err) {
-                    ctx.channel.appendLine(`Could not open visualization files: ${err}`);
-                }
+        ];
+
+        if (workspaceFolderUri) {
+            const workspaceRootUri = vscode.Uri.joinPath(workspaceFolderUri, getResultsRootFolderName(docUri.fsPath));
+            items.push({
+                label: 'Use workspace\'s folder',
+                description: 'Write results under the workspace folder.',
+                detail: `Results root: ${workspaceRootUri.fsPath}`,
+                action: 'workspace'
+            });
+        }
+
+        items.push({
+            label: 'Choose custom folder...',
+            description: 'Select a different base folder for generated results.',
+            detail: `Generated results will be written under <selected>/${getResultsRootFolderName(docUri.fsPath)}/<timestamp>/`,
+            action: 'choose'
+        });
+
+        const pick = await vscode.window.showQuickPick(items, {
+            title: `Current target: ${currentRootUri.fsPath}`,
+            placeHolder: `Results Folder for ${modelFileName}`
+        });
+
+        if (!pick) {
+            return;
+        }
+
+        if (pick.action === 'default') {
+            await updateResultsFolderSetting(docUri, null);
+            const resultsRootUri = getResultsRootUri(vscode.workspace.getConfiguration('bngl', docUri), docUri);
+            vscode.window.showInformationMessage(`Generated results for ${modelFileName} will now be written to ${resultsRootUri.fsPath}.`);
+            return;
+        }
+
+        if (pick.action === 'workspace') {
+            if (!workspaceFolderUri) {
+                return;
             }
+
+            await updateResultsFolderSetting(docUri, workspaceFolderUri.fsPath);
+            const workspaceRootUri = getResultsRootUri(vscode.workspace.getConfiguration('bngl', docUri), docUri);
+            vscode.window.showInformationMessage(`Generated results for ${modelFileName} will now be written to ${workspaceRootUri.fsPath}.`);
+            return;
+        }
+
+        if (pick.action === 'choose') {
+            const selectedFolderUri = await chooseCustomResultsFolder(docUri);
+            if (!selectedFolderUri) {
+                return;
+            }
+
+            if (isSamePath(selectedFolderUri.fsPath, modelFolderUri.fsPath)) {
+                await updateResultsFolderSetting(docUri, null);
+                const defaultRootUri = getResultsRootUri(vscode.workspace.getConfiguration('bngl', docUri), docUri);
+                vscode.window.showInformationMessage(`Generated results for ${modelFileName} will now be written to ${defaultRootUri.fsPath}.`);
+                return;
+            }
+
+            await updateResultsFolderSetting(docUri, selectedFolderUri.fsPath);
+            const customRootUri = getResultsRootUri(vscode.workspace.getConfiguration('bngl', docUri), docUri);
+            vscode.window.showInformationMessage(`Generated results for ${modelFileName} will now be written to ${customRootUri.fsPath}.`);
+            return;
         }
     };
 }

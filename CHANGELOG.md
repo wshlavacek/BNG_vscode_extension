@@ -4,6 +4,21 @@ All notable changes to the "bngl-grammar-vscode" extension will be documented in
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [Unreleased]
+
+## [0.8.1] - 2026-05-18
+
+### Changed
+- GraphML viewer tabs now use graph-specific titles instead of the generic `GraphML Viewer` label
+- GraphML viewer chrome now follows VS Code theme colors for the surrounding shell and toolbar
+- GraphML viewer now offers multiple layout modes (`preset`, `breadthfirst`, `grid`, `circle`, `concentric`, `cose`) plus a dedicated fit action
+- GraphML viewer toolbar now supports full-graph PNG export and GraphML export from inside the viewer
+- Contact-map GraphML now gets a cleaner extension-side viewer palette instead of the raw BioNetGen gray/white/yellow fills
+- Added a dedicated contact-map visualization command, while keeping a separate all-graphs command for the full GraphML set
+- Plot and GraphML viewers now include a day/night mode toggle with theme-aware colors
+- Plot traces now use a color-blind-friendly default series palette
+- Plot PNG export now renders at a higher scale for sharper text and lines
+
 ## [0.8.0] - 2026-04-02
 
 ### Added

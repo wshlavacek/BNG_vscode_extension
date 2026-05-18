@@ -8,7 +8,9 @@ suite('Command Registration', () => {
 
     const EXPECTED_COMMANDS = [
         'bng.run_bngl',
+        'bng.run_contactmap',
         'bng.run_viz',
+        'bng.results_folder',
         'bng.webview',
         'bng.setup',
         'bng.upgrade',

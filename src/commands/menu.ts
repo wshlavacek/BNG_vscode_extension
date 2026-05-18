@@ -12,7 +12,9 @@ export async function menuCommandHandler() {
     if (ext === 'bngl') {
         items.push(
             { label: '$(play) Simulate', description: 'Run the current BNGL model', cmd: 'bng.run_bngl' },
-            { label: '$(graph) Visualize', description: 'Generate contact map and network graphs', cmd: 'bng.run_viz' },
+            { label: '$(graph) Contact Map', description: 'Generate only the contact map GraphML', cmd: 'bng.run_contactmap' },
+            { label: '$(type-hierarchy) All Graphs', description: 'Generate contact map, rule visualization, and regulatory GraphML outputs', cmd: 'bng.run_viz' },
+            { label: '$(folder) Results Folder...', description: 'Choose where generated results are written', cmd: 'bng.results_folder' },
         );
     }
     if (['gdat', 'cdat', 'scan'].includes(ext || '')) {

@@ -55,6 +55,7 @@ to display, toggling axis scales, changing line styles, and exporting images.
 Visualization
 =============
 
-Click the BioNetGen icon and select "Visualize Network" from the dropdown. This will generate
-visualizations (contact maps, rule visualizations, regulatory graphs) as GraphML files. These
-files are designed to be used with `yEd <https://www.yworks.com/products/yed>`_.
+Click the BioNetGen icon and select ``Contact Map`` to generate only the contact-map GraphML, or
+``All Graphs`` to generate the full set of visualizations (contact maps, rule visualizations,
+regulatory graphs). These files are designed to be used with
+`yEd <https://www.yworks.com/products/yed>`_.

@@ -3,7 +3,7 @@ import * as path from 'path';
 import { LanguageClient, LanguageClientOptions, ServerOptions, TransportKind } from 'vscode-languageclient/node';
 import { ProcessManager, ProcessManagerProvider } from './utils/processManagement';
 import { PlotPanel } from './plotting/PlotPanel';
-import { createRunHandler, createVizHandler, createSetupHandler, createUpgradeHandler, CommandContext } from './commands/handlers';
+import { createRunHandler, createVizHandler, createContactMapHandler, createResultsFolderHandler, createSetupHandler, createUpgradeHandler, CommandContext } from './commands/handlers';
 import { menuCommandHandler } from './commands/menu';
 import { bnglFoldingProvider } from './folding/foldingProvider';
 
@@ -37,7 +37,9 @@ export function activate(context: vscode.ExtensionContext) {
 	// Register commands
 	context.subscriptions.push(
 		vscode.commands.registerCommand('bng.run_bngl', createRunHandler(ctx)),
+		vscode.commands.registerCommand('bng.run_contactmap', createContactMapHandler(ctx)),
 		vscode.commands.registerCommand('bng.run_viz', createVizHandler(ctx)),
+		vscode.commands.registerCommand('bng.results_folder', createResultsFolderHandler(ctx)),
 		vscode.commands.registerCommand('bng.webview', () => PlotPanel.create(context.extensionUri)),
 		vscode.commands.registerCommand('bng.setup', createSetupHandler(ctx)),
 		vscode.commands.registerCommand('bng.upgrade', createUpgradeHandler(ctx)),

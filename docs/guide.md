@@ -22,8 +22,18 @@ Once you finished writing the model, you can try running it. Click the BioNetGen
 
 ### Plotting results
 
-Once you have some ```gdat/cdat/scan``` files to look at, you can open one and click the BioNetGen icon to open the interactive plot viewer. The sidebar provides controls for selecting which variables to display, toggling axis scales, changing line styles, and exporting images.
+Once you have some ```gdat/cdat/scan``` files to look at, you can open one and click the BioNetGen icon to open the interactive plot viewer. The sidebar provides controls for selecting which variables to display, toggling axis scales, changing line styles, and exporting images. PNG export is scaled up so it comes out noticeably sharper, while SVG export remains available for vector output.
 
 ### Visualization
 
-Click the BioNetGen icon and select "Visualize Network" from the dropdown. This will generate visualizations (contact maps, rule visualizations, regulatory graphs) as GraphML files. These files are designed to be used with [yEd](https://www.yworks.com/products/yed).
+Click the BioNetGen icon and select **Contact Map** to generate only the contact-map GraphML, or **All Graphs** to generate the full set of visualizations (contact maps, rule visualizations, regulatory graphs). Open a generated `.graphml` file and choose **Open Plot / Viewer** to inspect it in the built-in GraphML viewer.
+
+The GraphML viewer toolbar lets you:
+
+- switch between multiple layout modes
+- reset the graph view
+- toggle between day and night viewer themes
+- export the graph as PNG
+- export GraphML directly from the viewer
+
+The generated GraphML files also remain compatible with [yEd](https://www.yworks.com/products/yed) if you prefer to continue working with them there.

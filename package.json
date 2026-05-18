@@ -16,7 +16,7 @@
     "name": "bngl",
     "displayName": "BioNetGen Language",
     "description": "BNG language extension for vscode",
-    "version": "0.8.0",
+    "version": "0.8.1",
     "engines": {
         "vscode": "^1.82.0"
     },
@@ -43,6 +43,7 @@
         "ms-python.python"
     ],
     "activationEvents": [
+        "onCommand:bng.results_folder",
         "onCommand:bng.setup",
         "onCommand:bng.upgrade",
         "onCommand:bng.menu",
@@ -115,8 +116,16 @@
                 "title": "BNG: Run Simulation"
             },
             {
+                "command": "bng.run_contactmap",
+                "title": "BNG: Visualize Contact Map"
+            },
+            {
                 "command": "bng.run_viz",
-                "title": "BNG: Visualize Network"
+                "title": "BNG: Visualize All Graphs"
+            },
+            {
+                "command": "bng.results_folder",
+                "title": "BNG: Results Folder..."
             },
             {
                 "command": "bng.webview",
@@ -170,6 +179,10 @@
                 {
                     "command": "bng.process_cleanup",
                     "when": "bng.processManagerActive"
+                },
+                {
+                    "command": "bng.results_folder",
+                    "when": "resourceLangId == bngl && resourceExtname == .bngl"
                 }
             ]
         },
@@ -181,7 +194,7 @@
                 "when": "resourceLangId == bngl && resourceExtname == .bngl"
             },
             {
-                "command": "bng.run_viz",
+                "command": "bng.run_contactmap",
                 "key": "ctrl+shift+f2",
                 "mac": "cmd+shift+f2",
                 "when": "resourceLangId == bngl && resourceExtname == .bngl"
@@ -212,12 +225,13 @@
                     "default": true
                 },
                 "bngl.general.result_folder": {
-                    "markdownDescription": "Set default folder for results in case a workspace is not open (use absolute path).",
+                    "markdownDescription": "Base folder for generated results. When unset, results are written beside the active model in `results_<model>/<timestamp>/`. Relative paths resolve from the workspace folder, or from the model folder when no workspace is open.",
                     "type": [
                         "string",
                         "null"
                     ],
-                    "default": null
+                    "default": null,
+                    "scope": "resource"
                 },
                 "bngl.plotting.legend": {
                     "markdownDescription": "To plot the legend or not with built-in plotting",
@@ -236,7 +250,7 @@
     "devDependencies": {
         "@types/mocha": "^10.0.10",
         "@types/node": "^25.5.0",
-        "@types/vscode": "^1.110.0",
+        "@types/vscode": "1.82.0",
         "@vscode/test-electron": "^2.5.2",
         "esbuild": "^0.27.5",
         "glob": "^13.0.6",

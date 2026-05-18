@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { parseDat } from '../parseDat';
+import { shouldUseStandaloneContactMapPalette } from '../resultsFolders';
 
 function getNonce(): string {
     let text = '';
@@ -15,6 +16,26 @@ function escapeHtml(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function getPanelTitle(fpath: string): string {
+    const extension = path.extname(fpath).substring(1);
+    const fname = path.basename(fpath, path.extname(fpath));
+
+    if (extension === 'graphml') {
+        return fname;
+    }
+    if (extension === 'gdat' || extension === 'cdat') {
+        return 'Plot viewer';
+    }
+    if (extension === 'scan') {
+        return 'Scan Plot';
+    }
+    return 'Unknown';
+}
+
+function getExportBaseName(fname: string, ext: string): string {
+    return ext === 'graphml' ? fname : `${fname}_${ext}`;
+}
+
 export class PlotPanel {
     public static currentPanels = new Map<string, PlotPanel>();
     public static readonly viewType = 'plot';
@@ -22,6 +43,17 @@ export class PlotPanel {
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
     private _disposables: vscode.Disposable[] = [];
+
+    public static disposeForFolder(folderPath: string) {
+        const normalizedFolderPath = path.resolve(folderPath);
+
+        for (const [filePath, panel] of Array.from(PlotPanel.currentPanels.entries())) {
+            const panelFolderPath = path.resolve(path.dirname(filePath));
+            if (panelFolderPath === normalizedFolderPath || panelFolderPath.startsWith(`${normalizedFolderPath}${path.sep}`)) {
+                panel.dispose();
+            }
+        }
+    }
 
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, private _fpath: string) {
         this._panel = panel;
@@ -41,6 +73,9 @@ export class PlotPanel {
                 case 'image':
                     this._save_image(message);
                     return;
+                case 'graphml-copy':
+                    this._save_graphml_copy(message);
+                    return;
             }
         }, null, this._disposables);
 
@@ -51,23 +86,23 @@ export class PlotPanel {
         }, null, this._disposables);
     }
 
-    public static create(extensionUri: vscode.Uri) {
+    public static create(extensionUri: vscode.Uri, target?: vscode.Uri | string, targetColumn?: vscode.ViewColumn) {
         const editor = vscode.window.activeTextEditor;
-        if (!editor) return;
+        const fpath = typeof target === 'string'
+            ? target
+            : target instanceof vscode.Uri
+                ? target.fsPath
+                : editor?.document.fileName;
+        if (!fpath) return;
 
-        const fpath = editor.document.fileName;
-        const column = vscode.window.activeTextEditor ? vscode.window.activeTextEditor.viewColumn : undefined;
+        const column = targetColumn ?? editor?.viewColumn;
 
         if (PlotPanel.currentPanels.has(fpath)) {
             PlotPanel.currentPanels.get(fpath)?._panel.reveal(column);
             return;
         }
 
-        const extension = path.extname(fpath).substring(1);
-        let title = 'Unknown';
-        if (extension === 'graphml') title = 'GraphML Viewer';
-        else if (extension === 'gdat' || extension === 'cdat') title = 'Plot viewer';
-        else if (extension === 'scan') title = 'Scan Plot';
+        const title = getPanelTitle(fpath);
 
         const panel = vscode.window.createWebviewPanel(
             PlotPanel.viewType,
@@ -88,6 +123,7 @@ export class PlotPanel {
         const nonce = getNonce();
         const extension = path.extname(this._fpath).substring(1);
         const fname = path.basename(this._fpath, path.extname(this._fpath));
+        const exportBaseName = getExportBaseName(fname, extension);
 
         const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'main.js'));
         const plotlyUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'plotly-latest.min.js'));
@@ -97,20 +133,40 @@ export class PlotPanel {
 
         const folder = path.dirname(this._fpath);
 
-        webview.html = this._get_html(webview, nonce, fname, extension, folder, stylesMainUri, jqUri, cytoUri, plotlyUri, scriptUri);
+        webview.html = this._get_html(webview, nonce, exportBaseName, extension, folder, stylesMainUri, jqUri, cytoUri, plotlyUri, scriptUri);
     }
 
-    private _get_html(webview: vscode.Webview, nonce: string, fname: string, ext: string, folder: string, stylesMainUri: vscode.Uri, jqUri: vscode.Uri, cytoUri: vscode.Uri, plotlyUri: vscode.Uri, scriptUri: vscode.Uri) {
-        const safeFname = escapeHtml(fname);
+    private _get_html(webview: vscode.Webview, nonce: string, exportBaseName: string, ext: string, folder: string, stylesMainUri: vscode.Uri, jqUri: vscode.Uri, cytoUri: vscode.Uri, plotlyUri: vscode.Uri, scriptUri: vscode.Uri) {
+        const safeExportBaseName = escapeHtml(exportBaseName);
         const safeExt = escapeHtml(ext);
         const safeFolder = escapeHtml(folder);
         let content = '';
         if (ext === 'graphml') {
             content = `
-                <div id="network"></div>
-                <div id="top_buttons">
-                  <button id="layout_button" class="button" type="button">Redo Layout</button>
-                  <button id="png_button" class="button" type="button">Save as PNG</button>
+                <div id="graph_shell">
+                    <div id="graph_toolbar">
+                    <div class="graph-toolbar-group">
+                      <label for="layout_select">Layout</label>
+                      <select id="layout_select" class="graph-select">
+                        <option value="preset">Preset (GraphML)</option>
+                        <option value="breadthfirst">Breadth First</option>
+                        <option value="grid">Grid</option>
+                        <option value="circle">Circle</option>
+                        <option value="concentric">Concentric</option>
+                        <option value="cose">Cose</option>
+                      </select>
+                      <button id="apply_layout_button" type="button">Apply Layout</button>
+                      <button id="fit_button" class="secondary" type="button">Reset View</button>
+                      <button id="view_mode_button" class="secondary" type="button">Night View</button>
+                    </div>
+                    <div class="graph-toolbar-group">
+                      <button id="png_button" type="button">Export PNG</button>
+                      <button id="graphml_button" class="secondary" type="button">Export GraphML</button>
+                    </div>
+                  </div>
+                  <div id="network_wrapper">
+                    <div id="network"></div>
+                  </div>
                 </div>
                 <script nonce="${nonce}" src="${jqUri}"></script>
                 <script nonce="${nonce}" src="${cytoUri}"></script>
@@ -159,6 +215,7 @@ export class PlotPanel {
                         </div>
                     </div>
                     <div class="sidebar-footer">
+                        <button id="view_mode_button" class="secondary">Night View</button>
                         <button id="export-png">Export PNG</button>
                         <button id="export-svg" class="secondary">Export SVG</button>
                     </div>
@@ -178,8 +235,9 @@ export class PlotPanel {
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <link href="${stylesMainUri}" rel="stylesheet">
             </head>
-            <body>
-                <div id="page_title" style="display: none;">${safeFname}_${safeExt}</div>
+            <body class="${ext === 'graphml' ? 'graph-view' : 'plot-view'}">
+                <div id="page_title" style="display: none;">${safeExportBaseName}</div>
+                <div id="page_extension" style="display: none;">${safeExt}</div>
                 <div id="folder" style="display: none;">${safeFolder}</div>
                 ${content}
                 <script nonce="${nonce}" src="${scriptUri}"></script>
@@ -195,7 +253,25 @@ export class PlotPanel {
         const config = vscode.workspace.getConfiguration('bngl');
 
         if (ext === 'graphml') {
-            this._panel.webview.postMessage({ command: 'network', context: 'data', data: text });
+            const folderUri = vscode.Uri.file(path.dirname(this._fpath));
+            let useContactMapViewerPalette = false;
+
+            try {
+                const entries = await vscode.workspace.fs.readDirectory(folderUri);
+                useContactMapViewerPalette = shouldUseStandaloneContactMapPalette(
+                    this._fpath,
+                    entries.map(([name]) => name)
+                );
+            } catch {
+                useContactMapViewerPalette = false;
+            }
+
+            this._panel.webview.postMessage({
+                command: 'network',
+                context: 'data',
+                data: text,
+                useContactMapViewerPalette
+            });
         } else {
             const data = parseDat(text);
             this._panel.webview.postMessage({
@@ -211,7 +287,9 @@ export class PlotPanel {
 
     private _save_image(message: any) {
         const folder = vscode.Uri.file(message.folder);
-        const uri = vscode.Uri.joinPath(folder, `${message.title}_${message.type}.${message.type === 'png' ? 'png' : 'svg'}`);
+        const suffix = message.suffix ? `_${message.suffix}` : '';
+        const ext = message.type === 'png' ? 'png' : 'svg';
+        const uri = vscode.Uri.joinPath(folder, `${message.title}${suffix}.${ext}`);
         let data: Buffer;
         if (message.type === 'png') {
             const prefix = 'data:image/png;base64,';
@@ -233,6 +311,18 @@ export class PlotPanel {
             vscode.window.showInformationMessage(`Image saved to ${uri.fsPath}`);
         }, (err) => {
             vscode.window.showErrorMessage(`Failed to save image: ${err.message}`);
+        });
+    }
+
+    private _save_graphml_copy(message: any) {
+        const folder = vscode.Uri.file(message.folder);
+        const uri = vscode.Uri.joinPath(folder, `${message.title}.graphml`);
+        const data = Buffer.from(message.text, 'utf8');
+
+        vscode.workspace.fs.writeFile(uri, data).then(() => {
+            vscode.window.showInformationMessage(`GraphML saved to ${uri.fsPath}`);
+        }, (err) => {
+            vscode.window.showErrorMessage(`Failed to save GraphML: ${err.message}`);
         });
     }
 
