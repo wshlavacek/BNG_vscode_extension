@@ -76,12 +76,14 @@ suite('PlotPanel', () => {
     test('uses graph-specific titles and exposes layout/export controls for GraphML', async function () {
         this.timeout(15_000);
 
-        const doc = await vscode.workspace.openTextDocument(graphmlPath);
-        await vscode.window.showTextDocument(doc);
-        await vscode.commands.executeCommand('bng.webview');
+        PlotPanel.create(
+            vscode.extensions.getExtension('als251.bngl')!.extensionUri,
+            vscode.Uri.file(graphmlPath),
+            vscode.ViewColumn.One
+        );
 
         const panelWrapper = PlotPanel.currentPanels.get(graphmlPath) as any;
-        assert.ok(panelWrapper, 'expected a PlotPanel instance for the opened GraphML file');
+        assert.ok(panelWrapper, 'expected a PlotPanel instance for the explicit GraphML file');
 
         const panel = panelWrapper._panel as vscode.WebviewPanel;
         assert.strictEqual(panel.title, 'test_contactmap');
@@ -95,7 +97,11 @@ suite('PlotPanel', () => {
         assert.match(html, /Export GraphML/);
         assert.doesNotMatch(html, /Delete Results/);
 
-        await vscode.commands.executeCommand('bng.webview');
+        PlotPanel.create(
+            vscode.extensions.getExtension('als251.bngl')!.extensionUri,
+            vscode.Uri.file(graphmlPath),
+            vscode.ViewColumn.One
+        );
         assert.strictEqual(PlotPanel.currentPanels.size, 1, 'expected re-opening to reuse the existing panel');
     });
 
