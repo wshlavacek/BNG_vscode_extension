@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { parseDat } from '../parseDat';
-import { shouldUseStandaloneContactMapPalette } from '../resultsFolders';
+import { getGraphmlVisualizationKind, shouldUseStandaloneContactMapPalette } from '../resultsFolders';
 
 function getNonce(): string {
     let text = '';
@@ -78,12 +78,6 @@ export class PlotPanel {
                     return;
             }
         }, null, this._disposables);
-
-        this._panel.onDidChangeViewState(() => {
-            if (this._panel.visible) {
-                this._send_figure_data();
-            }
-        }, null, this._disposables);
     }
 
     public static create(extensionUri: vscode.Uri, target?: vscode.Uri | string, targetColumn?: vscode.ViewColumn) {
@@ -155,9 +149,11 @@ export class PlotPanel {
                         <option value="concentric">Concentric</option>
                         <option value="cose">Cose</option>
                       </select>
-                      <button id="apply_layout_button" type="button">Apply Layout</button>
-                      <button id="fit_button" class="secondary" type="button">Reset View</button>
+                      <button id="layout_lock_button" class="secondary" type="button">Lock Layout</button>
+                      <button id="fit_button" class="secondary" type="button">Scale to Fit</button>
                       <button id="view_mode_button" class="secondary" type="button">Night View</button>
+                      <button id="toggle_components_button" class="secondary" type="button" hidden>Hide Components</button>
+                      <button id="toggle_internal_states_button" class="secondary" type="button" hidden>Hide Internal States</button>
                     </div>
                     <div class="graph-toolbar-group">
                       <button id="png_button" type="button">Export PNG</button>
@@ -254,6 +250,7 @@ export class PlotPanel {
 
         if (ext === 'graphml') {
             const folderUri = vscode.Uri.file(path.dirname(this._fpath));
+            const graphKind = getGraphmlVisualizationKind(this._fpath);
             let useContactMapViewerPalette = false;
 
             try {
@@ -270,6 +267,7 @@ export class PlotPanel {
                 command: 'network',
                 context: 'data',
                 data: text,
+                graphKind,
                 useContactMapViewerPalette
             });
         } else {
