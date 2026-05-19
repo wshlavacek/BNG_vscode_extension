@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-05-19
+
 ### Changed
 - The standalone Contact Map viewer palette keeps its extension-side override, but now uses higher-contrast Scientific Miro day/night palettes with framed nested boxes and stronger border and label contrast
 - GraphML viewer nodes now respect GraphML width/height metadata, and regulatory graph labels are centered inside their nodes to reduce arrow collisions
