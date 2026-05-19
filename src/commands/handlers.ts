@@ -28,6 +28,9 @@ interface ResultsFolderMenuItem extends vscode.QuickPickItem {
 }
 
 const PYBIONETGEN_ENTRYPOINT = 'from bionetgen.main import main as _bng_main; raise SystemExit(_bng_main())';
+const PYBIONETGEN_PACKAGE = 'bionetgen';
+const PYBIONETGEN_SETUPTOOLS_COMPAT_SPEC = 'setuptools<82';
+const PYBIONETGEN_COMPATIBILITY_CHECK = 'import pkg_resources; import bionetgen';
 
 function getTimestampedFolderName(): string {
     const d = new Date();
@@ -89,6 +92,59 @@ function createBionetgenCommand(pythonCommand: CommandSpec, pybngVersion: string
 
 function createPipCommand(pythonCommand: CommandSpec, args: string[]): CommandSpec {
     return appendCommandArgs(pythonCommand, ['-m', 'pip', ...args]);
+}
+
+function createPyBioNetGenInstallCommand(pythonCommand: CommandSpec): CommandSpec {
+    return createPipCommand(pythonCommand, ['install', '--upgrade', PYBIONETGEN_PACKAGE, PYBIONETGEN_SETUPTOOLS_COMPAT_SPEC]);
+}
+
+function createPyBioNetGenCompatibilityRepairCommand(pythonCommand: CommandSpec): CommandSpec {
+    return createPipCommand(pythonCommand, ['install', '--upgrade', PYBIONETGEN_SETUPTOOLS_COMPAT_SPEC]);
+}
+
+function createPyBioNetGenCompatibilityCheckCommand(pythonCommand: CommandSpec): CommandSpec {
+    return appendCommandArgs(pythonCommand, ['-c', PYBIONETGEN_COMPATIBILITY_CHECK]);
+}
+
+async function ensurePyBioNetGenCompatibility(ctx: CommandContext, pythonCommand: CommandSpec): Promise<boolean> {
+    ctx.channel.appendLine('Checking PyBioNetGen compatibility.');
+    const compatibilityCheckExitCode = await spawnAsync(
+        createPyBioNetGenCompatibilityCheckCommand(pythonCommand),
+        ctx.channel,
+        ctx.processManager
+    );
+
+    if (compatibilityCheckExitCode === 0) {
+        ctx.channel.appendLine('PyBioNetGen compatibility check passed.');
+        return true;
+    }
+
+    ctx.channel.appendLine(`PyBioNetGen compatibility check failed; installing ${PYBIONETGEN_SETUPTOOLS_COMPAT_SPEC}.`);
+    const repairExitCode = await spawnAsync(
+        createPyBioNetGenCompatibilityRepairCommand(pythonCommand),
+        ctx.channel,
+        ctx.processManager
+    );
+
+    if (repairExitCode !== 0) {
+        ctx.channel.appendLine(`Compatibility repair failed for python command: ${formatCommandSpec(pythonCommand)}`);
+        return false;
+    }
+
+    ctx.channel.appendLine('Re-checking PyBioNetGen compatibility.');
+    const finalCheckExitCode = await spawnAsync(
+        createPyBioNetGenCompatibilityCheckCommand(pythonCommand),
+        ctx.channel,
+        ctx.processManager
+    );
+
+    if (finalCheckExitCode !== 0) {
+        ctx.channel.appendLine(`PyBioNetGen compatibility is still broken after repair for python command: ${formatCommandSpec(pythonCommand)}`);
+        return false;
+    }
+
+    ctx.channel.appendLine(`PyBioNetGen compatibility repaired for python command: ${formatCommandSpec(pythonCommand)}`);
+    return true;
 }
 
 function getVisualizationCommandLabel(visualizationType: VisualizationType): string {
@@ -421,22 +477,33 @@ export function createSetupHandler(ctx: CommandContext) {
         ctx.channel.appendLine('Found python command: ' + formatCommandSpec(pythonCommand));
 
         ctx.channel.appendLine('Checking for bionetgen.');
-        const bngCheckExitCode = await spawnAsync(createPipCommand(pythonCommand, ['show', 'bionetgen']), ctx.channel, ctx.processManager);
+        const bngCheckExitCode = await spawnAsync(createPipCommand(pythonCommand, ['show', PYBIONETGEN_PACKAGE]), ctx.channel, ctx.processManager);
 
         if (bngCheckExitCode !== 0) {
             ctx.channel.appendLine('Installing PyBNG for python command: ' + formatCommandSpec(pythonCommand));
             vscode.window.showInformationMessage(`Setting up BNG for Python: ${pythonCommand.command}`);
-            const installExitCode = await spawnAsync(createPipCommand(pythonCommand, ['install', 'bionetgen', '--upgrade']), ctx.channel, ctx.processManager);
+            const installExitCode = await spawnAsync(createPyBioNetGenInstallCommand(pythonCommand), ctx.channel, ctx.processManager);
             if (installExitCode !== 0) {
                 ctx.channel.appendLine('pip install failed for python command: ' + formatCommandSpec(pythonCommand));
                 vscode.window.showInformationMessage('BNG setup failed, see BNGL output channel for details.');
                 ctx.channel.show();
             } else {
+                const compatible = await ensurePyBioNetGenCompatibility(ctx, pythonCommand);
+                if (!compatible) {
+                    vscode.window.showInformationMessage('BNG setup failed, see BNGL output channel for details.');
+                    ctx.channel.show();
+                    return;
+                }
                 ctx.channel.appendLine('pip install succeeded for python command: ' + formatCommandSpec(pythonCommand));
                 vscode.window.showInformationMessage('BNG setup complete.');
             }
         } else {
             ctx.channel.appendLine('Found bionetgen.');
+            const compatible = await ensurePyBioNetGenCompatibility(ctx, pythonCommand);
+            if (!compatible) {
+                vscode.window.showInformationMessage('BNG setup failed, see BNGL output channel for details.');
+                ctx.channel.show();
+            }
         }
     };
 }
@@ -447,12 +514,18 @@ export function createUpgradeHandler(ctx: CommandContext) {
         const pythonCommand = await getPythonCommand(ctx.channel);
         ctx.channel.appendLine('Found python command: ' + formatCommandSpec(pythonCommand));
         vscode.window.showInformationMessage(`Upgrading BNG for Python: ${pythonCommand.command}`);
-        const upgradeExitCode = await spawnAsync(createPipCommand(pythonCommand, ['install', 'bionetgen', '--upgrade']), ctx.channel, ctx.processManager);
+        const upgradeExitCode = await spawnAsync(createPyBioNetGenInstallCommand(pythonCommand), ctx.channel, ctx.processManager);
         if (upgradeExitCode !== 0) {
             ctx.channel.appendLine('pip upgrade failed for python command: ' + formatCommandSpec(pythonCommand));
             vscode.window.showInformationMessage('BNG upgrade failed, see BNGL output channel for details.');
             ctx.channel.show();
         } else {
+            const compatible = await ensurePyBioNetGenCompatibility(ctx, pythonCommand);
+            if (!compatible) {
+                vscode.window.showInformationMessage('BNG upgrade failed, see BNGL output channel for details.');
+                ctx.channel.show();
+                return;
+            }
             ctx.channel.appendLine('pip upgrade successful for python command: ' + formatCommandSpec(pythonCommand));
             vscode.window.showInformationMessage('BNG upgrade complete.');
         }

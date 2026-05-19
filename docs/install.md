@@ -58,6 +58,8 @@ The extension's editing features (syntax highlighting, diagnostics, autocomplete
 
 The extension will automatically check for PyBioNetGen on activation and offer to install it. You can verify manually by running `bionetgen -h` in a terminal.
 
+When the extension installs or upgrades PyBioNetGen, it also keeps `setuptools<82` pinned for compatibility with current PyBioNetGen releases that still import `pkg_resources`.
+
 ### Additional setup
 
 You may need to tell VS Code which Python interpreter to use. Open the command palette (`Ctrl/Cmd+Shift+P`) and run **Python: Select Interpreter**.

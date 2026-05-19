@@ -6,6 +6,17 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+### Changed
+- The standalone Contact Map viewer palette keeps its extension-side override, but now uses higher-contrast Scientific Miro day/night palettes with framed nested boxes and stronger border and label contrast
+- GraphML viewer nodes now respect GraphML width/height metadata, and regulatory graph labels are centered inside their nodes to reduce arrow collisions
+- Contact-map and regulatory graphs without preset coordinates now default to a more spacious `cose` layout, while the other layout presets use more overlap-aware spacing
+- Contact maps now expose direct layout selection, a layout lock, `Scale to Fit`, and show/hide toggles for components and internal states in the built-in viewer
+
+### Fixed
+- GraphML label colors now auto-correct for poor contrast against node fills, addressing hard-to-read light-gray labels in dark mode
+- Contact-map labels now stay visible in `cose` layouts instead of disappearing at the initial fit zoom, and their font sizing better tracks the node boxes
+- `bng.setup` and `bng.upgrade` now pin `setuptools<82` and repair existing environments when `pkg_resources` is missing from newer setuptools releases
+
 ## [0.8.1] - 2026-05-18
 
 ### Changed

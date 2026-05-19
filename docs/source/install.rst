@@ -12,6 +12,9 @@ Installing from the VS Code Marketplace
    (`Marketplace link <https://marketplace.visualstudio.com/items?itemName=als251.bngl>`_)
 
 The extension will automatically check for PyBioNetGen on activation and offer to install it.
+When the extension installs or upgrades PyBioNetGen, it also keeps ``setuptools<82``
+pinned for compatibility with current PyBioNetGen releases that still import
+``pkg_resources``.
 
 Prerequisites for running models
 ---------------------------------

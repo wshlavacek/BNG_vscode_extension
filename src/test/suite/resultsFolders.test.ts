@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
+    getGraphmlVisualizationKind,
     getResultsBaseFolderUri,
     getResultsRootFolderName,
     getResultsRunFolderUri,
@@ -34,6 +35,13 @@ suite('Results Folders', () => {
             shouldUseStandaloneContactMapPalette(filePath, ['nfkb.bngl', 'nfkb_contactmap.graphml', 'nfkb_regulatory.graphml']),
             false
         );
+    });
+
+    test('classifies graphml visualization kinds from filenames', () => {
+        assert.strictEqual(getGraphmlVisualizationKind('/tmp/nfkb_contactmap.graphml'), 'contactmap');
+        assert.strictEqual(getGraphmlVisualizationKind('/tmp/nfkb_regulatory.graphml'), 'regulatory');
+        assert.strictEqual(getGraphmlVisualizationKind('/tmp/nfkb_ruleviz_operation.graphml'), 'ruleviz');
+        assert.strictEqual(getGraphmlVisualizationKind('/tmp/nfkb_notes.txt'), 'other');
     });
 
     test('uses the model folder when no custom results base is configured', () => {

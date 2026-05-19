@@ -90,12 +90,16 @@ suite('PlotPanel', () => {
 
         const html = panel.webview.html;
         assert.match(html, /id="layout_select"/);
-        assert.match(html, /Apply Layout/);
-        assert.match(html, /Reset View/);
+        assert.match(html, /Lock Layout/);
+        assert.match(html, /Scale to Fit/);
         assert.match(html, /Night View/);
+        assert.match(html, /Hide Components/);
+        assert.match(html, /Hide Internal States/);
         assert.match(html, /Export PNG/);
         assert.match(html, /Export GraphML/);
         assert.doesNotMatch(html, /Delete Results/);
+        assert.doesNotMatch(html, /Apply Layout/);
+        assert.doesNotMatch(html, /Reset View/);
 
         PlotPanel.create(
             vscode.extensions.getExtension('als251.bngl')!.extensionUri,

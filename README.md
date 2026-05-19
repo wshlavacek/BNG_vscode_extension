@@ -17,16 +17,14 @@ A [VS Code](https://code.visualstudio.com/) extension for the [BioNetGen](http:/
 ## Usage
 
 1. Open or create a `.bngl` file. Syntax highlighting and language server features activate automatically.
-2. Click the **BioNetGen icon** in the editor title bar to open the command menu. From the dropdown you can:
-   - **Run Simulation** (`Ctrl/Cmd+Shift+F1` on `.bngl` files)
-   - **Contact Map** (`Ctrl/Cmd+Shift+F2` on `.bngl` files)
-   - **All Graphs**
-   - **Open Plot / Viewer** (`Ctrl/Cmd+Shift+F1` on `.gdat`/`.cdat`/`.scan` files)
-   - **Install/Check PyBioNetGen**
-   - **Upgrade PyBioNetGen**
+2. Click the **BioNetGen icon** in the editor title bar to open the command menu. Depending on the active file, the dropdown can show:
+   - **Simulate**, **Contact Map**, **All Graphs**, and **Results Folder...** for `.bngl` files
+   - **Plot** for `.gdat` / `.cdat` / `.scan` files
+   - **View** for `.graphml` files
+   - **Install** and **Upgrade** for PyBioNetGen management
 3. After a simulation completes, the resulting `.gdat` file opens automatically. Click the BioNetGen icon to launch the interactive plot viewer.
 4. Use **Contact Map** to generate only the contact-map GraphML, or **All Graphs** when you also want rule-visualization and regulatory outputs.
-5. Generated GraphML files can be opened in the built-in viewer, where you can switch layouts, reset the view, toggle day/night mode, export the graph as PNG, or export GraphML from the toolbar.
+5. Generated GraphML files can be opened in the built-in viewer, where you can switch layouts directly, lock or unlock the layout, use **Scale to Fit**, toggle day/night mode, and export the graph as PNG or GraphML from the toolbar. Contact maps also include show/hide toggles for components and internal states.
 6. Use the **sidebar controls** in the plot viewer to toggle variables on/off, switch axis scales (linear/log), change line styles, toggle the legend, and export images.
 
 ## Requirements
@@ -37,6 +35,8 @@ The editing features (highlighting, diagnostics, autocomplete, navigation) work 
 * [Python 3](https://www.python.org/) (we recommend [Anaconda](https://docs.anaconda.com/anaconda/))
 * [PyBioNetGen](https://github.com/RuleWorld/PyBioNetGen) (`pip install bionetgen`)
 * Perl (Windows users: `conda install -c conda-forge perl`)
+
+The extension's **Install** and **Upgrade** actions keep `setuptools<82` pinned for now, because current PyBioNetGen releases still import `pkg_resources`.
 
 ## Installation
 

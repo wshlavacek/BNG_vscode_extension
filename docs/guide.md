@@ -31,8 +31,10 @@ Click the BioNetGen icon and select **Contact Map** to generate only the contact
 The GraphML viewer toolbar lets you:
 
 - switch between multiple layout modes
-- reset the graph view
+- lock or unlock the current layout
+- scale the graph to fit the viewport
 - toggle between day and night viewer themes
+- show or hide components and internal states in contact maps
 - export the graph as PNG
 - export GraphML directly from the viewer
 

@@ -3,6 +3,8 @@ import * as vscode from 'vscode';
 
 const GENERATED_RESULTS_RUN_PATTERN = /^\d{4}_\d{2}_\d{2}__\d{2}_\d{2}_\d{2}$/;
 
+export type GraphmlVisualizationKind = 'contactmap' | 'regulatory' | 'ruleviz' | 'other';
+
 function isGraphmlFileName(name: string): boolean {
     return path.extname(name).toLowerCase() === '.graphml';
 }
@@ -65,8 +67,30 @@ export function isGeneratedResultsRunFolderName(name: string): boolean {
     return GENERATED_RESULTS_RUN_PATTERN.test(name);
 }
 
+export function getGraphmlVisualizationKind(filePath: string): GraphmlVisualizationKind {
+    if (!isGraphmlFileName(filePath)) {
+        return 'other';
+    }
+
+    const baseName = path.basename(filePath, path.extname(filePath)).toLowerCase();
+
+    if (baseName.includes('contactmap')) {
+        return 'contactmap';
+    }
+
+    if (baseName.includes('regulatory')) {
+        return 'regulatory';
+    }
+
+    if (baseName.includes('ruleviz')) {
+        return 'ruleviz';
+    }
+
+    return 'other';
+}
+
 export function isContactMapGraphmlFileName(name: string): boolean {
-    return isGraphmlFileName(name) && path.basename(name, path.extname(name)).toLowerCase().includes('contactmap');
+    return getGraphmlVisualizationKind(name) === 'contactmap';
 }
 
 export function shouldUseStandaloneContactMapPalette(filePath: string, siblingNames: readonly string[]): boolean {
