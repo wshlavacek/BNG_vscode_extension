@@ -5,6 +5,7 @@ import { getPythonCommand } from '../utils/getPythonPath';
 import { CommandSpec, appendCommandArgs, createCommandSpec, formatCommandSpec } from '../utils/commandSpec';
 import { ProcessManager } from '../utils/processManagement';
 import { PlotPanel } from '../plotting/PlotPanel';
+import { parseBnglDocument } from '../server/parser';
 import {
     getModelFolderUri,
     getResultsBaseFolderUri,
@@ -21,7 +22,7 @@ export interface CommandContext {
     extensionContext: vscode.ExtensionContext;
 }
 
-type VisualizationType = 'all' | 'contactmap';
+export type VisualizationType = 'all' | 'contactmap' | 'regulatory' | 'ruleviz_operation';
 
 interface ResultsFolderMenuItem extends vscode.QuickPickItem {
     action: 'default' | 'workspace' | 'choose';
@@ -31,6 +32,8 @@ const PYBIONETGEN_ENTRYPOINT = 'from bionetgen.main import main as _bng_main; ra
 const PYBIONETGEN_PACKAGE = 'bionetgen';
 const PYBIONETGEN_SETUPTOOLS_COMPAT_SPEC = 'setuptools<82';
 const PYBIONETGEN_COMPATIBILITY_CHECK = 'import pkg_resources; import bionetgen';
+const STANDALONE_REGULATORY_VISUALIZE_ACTION = 'visualize({type=>"regulatory",ruleNames=>1})';
+const STANDALONE_RULEVIZ_OPERATION_VISUALIZE_ACTION = 'visualize({type=>"ruleviz_operation",each=>1})';
 
 function getTimestampedFolderName(): string {
     const d = new Date();
@@ -148,7 +151,19 @@ async function ensurePyBioNetGenCompatibility(ctx: CommandContext, pythonCommand
 }
 
 function getVisualizationCommandLabel(visualizationType: VisualizationType): string {
-    return visualizationType === 'contactmap' ? 'contact map' : 'visualization graphs';
+    if (visualizationType === 'contactmap') {
+        return 'contact map';
+    }
+
+    if (visualizationType === 'regulatory') {
+        return 'regulatory graph';
+    }
+
+    if (visualizationType === 'ruleviz_operation') {
+        return 'RuleViz (Operation)';
+    }
+
+    return 'visualization graphs';
 }
 
 function getCommandTargetUri(target?: unknown): vscode.Uri | undefined {
@@ -217,7 +232,57 @@ function getVisualizationOutputMatcher(visualizationType: VisualizationType) {
         return (name: string) => name.toLowerCase().endsWith('_contactmap.graphml') || name.toLowerCase().includes('contactmap');
     }
 
+    if (visualizationType === 'regulatory') {
+        return (name: string) => name.toLowerCase().endsWith('_regulatory.graphml') || name.toLowerCase().includes('regulatory');
+    }
+
+    if (visualizationType === 'ruleviz_operation') {
+        return (name: string) => name.toLowerCase().endsWith('_ruleviz_operation.graphml') || name.toLowerCase().includes('ruleviz_operation');
+    }
+
     return (name: string) => name.toLowerCase().endsWith('.graphml');
+}
+
+function createStandaloneVisualizationInputText(sourceText: string, visualizeAction: string): string {
+    const document = parseBnglDocument(sourceText);
+    const lineEnding = sourceText.includes('\r\n') ? '\r\n' : '\n';
+    const lines = sourceText.split(/\r?\n/);
+    const skippedLines = new Set<number>();
+
+    for (const block of document.blocks) {
+        if (block.type !== 'actions' && block.type !== 'protocol') {
+            continue;
+        }
+
+        const endLine = block.endLine >= block.startLine ? block.endLine : lines.length - 1;
+        for (let line = block.startLine; line <= Math.min(endLine, lines.length - 1); line += 1) {
+            skippedLines.add(line);
+        }
+    }
+
+    for (const action of document.actions) {
+        skippedLines.add(action.line);
+    }
+
+    const keptLines = lines.filter((_, index) => !skippedLines.has(index));
+    while (keptLines.length > 0 && keptLines[keptLines.length - 1].trim() === '') {
+        keptLines.pop();
+    }
+
+    if (keptLines.length > 0) {
+        keptLines.push('');
+    }
+
+    keptLines.push(visualizeAction, '');
+    return keptLines.join(lineEnding);
+}
+
+export function createStandaloneRegulatoryInputText(sourceText: string): string {
+    return createStandaloneVisualizationInputText(sourceText, STANDALONE_REGULATORY_VISUALIZE_ACTION);
+}
+
+export function createStandaloneRulevizOperationInputText(sourceText: string): string {
+    return createStandaloneVisualizationInputText(sourceText, STANDALONE_RULEVIZ_OPERATION_VISUALIZE_ACTION);
 }
 
 async function openVisualizationOutputs(
@@ -235,6 +300,12 @@ async function openVisualizationOutputs(
 
     if (matches.length === 0) {
         channel.appendLine(`No GraphML output matched visualization type "${visualizationType}" in ${folderUri.fsPath}`);
+        return;
+    }
+
+    if (visualizationType === 'ruleviz_operation') {
+        const graphmlUri = vscode.Uri.joinPath(folderUri, matches[0]);
+        PlotPanel.create(extensionContext.extensionUri, graphmlUri, targetColumn);
         return;
     }
 
@@ -258,18 +329,37 @@ function createVisualizationHandler(ctx: CommandContext, visualizationType: Visu
         const copy_path = vscode.Uri.joinPath(new_fold_uri, fname);
 
         await vscode.workspace.fs.createDirectory(new_fold_uri);
-        await vscode.workspace.fs.copy(editor.document.uri, copy_path);
+        if (visualizationType === 'regulatory' || visualizationType === 'ruleviz_operation') {
+            const sourceBytes = await vscode.workspace.fs.readFile(editor.document.uri);
+            const sourceText = Buffer.from(sourceBytes).toString('utf8');
+            const standaloneVisualizationInputText = visualizationType === 'regulatory'
+                ? createStandaloneRegulatoryInputText(sourceText)
+                : createStandaloneRulevizOperationInputText(sourceText);
+            await vscode.workspace.fs.writeFile(copy_path, Buffer.from(standaloneVisualizationInputText, 'utf8'));
+        } else {
+            await vscode.workspace.fs.copy(editor.document.uri, copy_path);
+        }
 
         const pythonCommand = await getPythonCommand(ctx.channel);
-        const vizCommand = createBionetgenCommand(pythonCommand, ctx.pybngVersion, [
-            'visualize',
-            '-i',
-            copy_path.fsPath,
-            '-o',
-            new_fold_uri.fsPath,
-            '-t',
-            visualizationType
-        ]);
+        const vizCommand = visualizationType === 'regulatory' || visualizationType === 'ruleviz_operation'
+            ? createBionetgenCommand(pythonCommand, ctx.pybngVersion, [
+                'run',
+                '-i',
+                copy_path.fsPath,
+                '-o',
+                new_fold_uri.fsPath,
+                '-l',
+                new_fold_uri.fsPath
+            ])
+            : createBionetgenCommand(pythonCommand, ctx.pybngVersion, [
+                'visualize',
+                '-i',
+                copy_path.fsPath,
+                '-o',
+                new_fold_uri.fsPath,
+                '-t',
+                visualizationType
+            ]);
         const term_cmd = formatCommandSpec(vizCommand);
         const commandLabel = getVisualizationCommandLabel(visualizationType);
         ctx.channel.appendLine(`Visualization results folder: ${new_fold_uri.fsPath}`);
@@ -368,6 +458,14 @@ export function createVizHandler(ctx: CommandContext) {
 
 export function createContactMapHandler(ctx: CommandContext) {
     return createVisualizationHandler(ctx, 'contactmap');
+}
+
+export function createRegulatoryGraphHandler(ctx: CommandContext) {
+    return createVisualizationHandler(ctx, 'regulatory');
+}
+
+export function createRulevizOperationHandler(ctx: CommandContext) {
+    return createVisualizationHandler(ctx, 'ruleviz_operation');
 }
 
 export function createResultsFolderHandler(ctx: CommandContext) {

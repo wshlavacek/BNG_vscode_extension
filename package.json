@@ -120,6 +120,14 @@
                 "title": "BNG: Visualize Contact Map"
             },
             {
+                "command": "bng.run_regulatory",
+                "title": "BNG: Visualize Regulatory Graph"
+            },
+            {
+                "command": "bng.run_ruleviz_operation",
+                "title": "BNG: Visualize RuleViz (Operation)"
+            },
+            {
                 "command": "bng.run_viz",
                 "title": "BNG: Visualize All Graphs"
             },

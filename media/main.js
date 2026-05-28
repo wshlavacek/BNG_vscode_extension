@@ -4,6 +4,7 @@
     const vscode = acquireVsCodeApi();
 
     const network = document.getElementById('network');
+    const rulevizBrowser = document.getElementById('ruleviz_browser');
     const plotElement = document.getElementById('plot');
     const viewModeButton = document.getElementById('view_mode_button');
 
@@ -29,9 +30,12 @@
     const graphFitPadding = 40;
     const VIEW_MODE_LIGHT = 'light';
     const VIEW_MODE_DARK = 'dark';
+    const REGULATORY_RULE_BNGL_CAPTION_CLASS = 'regulatory-rule-bngl-caption';
+    const REGULATORY_RULE_BNGL_HIDDEN_CLASS = 'regulatory-rule-bngl-hidden';
+    const RULEVIZ_BROWSER_RULE_BNGL_HIDDEN_CLASS = 'ruleviz-browser-rule-bngl-hidden';
     const contactMapViewerPalettes = {
         [VIEW_MODE_LIGHT]: {
-            background: '#faf8f2',
+            background: '#ffffff',
             moleculeFill: '#eee8d8',
             moleculeBorder: '#262b33',
             moleculeLabel: '#14181e',
@@ -75,6 +79,88 @@
             divider: '#697380'
         }
     };
+    const regulatoryViewerPalettes = {
+        [VIEW_MODE_LIGHT]: {
+            background: '#ffffff',
+            nodeFill: '#e4efe8',
+            nodeBorder: '#355246',
+            nodeLabel: '#14221c',
+            edge: '#5b7469',
+            arrow: '#26352e',
+            activatedAccent: '#307659',
+            inhibitedAccent: '#b54c42',
+            modifiedAccent: '#c79634',
+            uncertainAccent: '#7a8793'
+        },
+        [VIEW_MODE_DARK]: {
+            background: '#101821',
+            nodeFill: '#273d36',
+            nodeBorder: '#90b2a3',
+            nodeLabel: '#e8f2ed',
+            edge: '#8fa89d',
+            arrow: '#dce6e0',
+            activatedAccent: '#62b58b',
+            inhibitedAccent: '#e07b70',
+            modifiedAccent: '#e2bd68',
+            uncertainAccent: '#a6b3bd'
+        }
+    };
+    const rulevizBrowserPalettes = {
+        [VIEW_MODE_LIGHT]: {
+            background: '#f5f0e7',
+            rowBackground: '#fffdf8',
+            rowBorder: '#d8cfbf',
+            rowShadow: 'rgba(84, 67, 41, 0.08)',
+            canvasBackground: '#fcf9f2',
+            canvasBorder: '#ddd3c4',
+            labelForeground: '#1f2a30',
+            mutedForeground: '#6f7169',
+            moleculeFill: '#dbc8af',
+            moleculeBorder: '#735a3d',
+            moleculeLabel: '#2d2012',
+            componentFill: '#d6e3d8',
+            componentBorder: '#557363',
+            componentLabel: '#1e3128',
+            ruleFill: '#f7f3ea',
+            ruleBorder: '#6d5c46',
+            ruleLabel: '#2f251a',
+            operationFill: '#ccb9e2',
+            operationBorder: '#6f5b8e',
+            operationLabel: '#312043',
+            stateFill: '#f1d79a',
+            stateBorder: '#a5721f',
+            stateLabel: '#4c3403',
+            edge: '#7b7265',
+            arrow: '#4e463d'
+        },
+        [VIEW_MODE_DARK]: {
+            background: '#10161a',
+            rowBackground: '#162026',
+            rowBorder: '#334048',
+            rowShadow: 'rgba(0, 0, 0, 0.22)',
+            canvasBackground: '#0d1317',
+            canvasBorder: '#38444c',
+            labelForeground: '#eef3ee',
+            mutedForeground: '#a8b0a8',
+            moleculeFill: '#6e5a44',
+            moleculeBorder: '#d5c0a0',
+            moleculeLabel: '#f8f1e3',
+            componentFill: '#395045',
+            componentBorder: '#a8c5b7',
+            componentLabel: '#eef7f1',
+            ruleFill: '#243037',
+            ruleBorder: '#d1c0a7',
+            ruleLabel: '#f4ede2',
+            operationFill: '#7d6797',
+            operationBorder: '#e3d7ee',
+            operationLabel: '#fbf7ff',
+            stateFill: '#c49d3f',
+            stateBorder: '#f0d48d',
+            stateLabel: '#211905',
+            edge: '#9fa79f',
+            arrow: '#e2e9e3'
+        }
+    };
 
     let current_plot_data = [];
     let plotReady = false;
@@ -82,16 +168,34 @@
     let graphKind = 'other';
     let graphHasComponents = false;
     let graphHasInternalStates = false;
-    let useContactMapViewerPalette = false;
+    let standaloneGraphPaletteKind = null;
     let showComponents = true;
     let showInternalStates = true;
+    let showRegulatoryRuleBngl = false;
     let currentGraphLayoutName = 'preset';
     let graphLayoutLocked = false;
+    let currentRulevizBrowser = null;
     let hostViewMode = inferHostViewMode();
     let currentViewMode = resolveInitialViewMode();
 
     function isStandaloneContactMapViewer() {
-        return graphKind === 'contactmap' && useContactMapViewerPalette;
+        return graphKind === 'contactmap' && standaloneGraphPaletteKind === 'contactmap';
+    }
+
+    function isStandaloneRegulatoryViewer() {
+        return graphKind === 'regulatory' && standaloneGraphPaletteKind === 'regulatory';
+    }
+
+    function isStandaloneRulevizOperationViewer() {
+        return graphKind === 'ruleviz_operation' && standaloneGraphPaletteKind === 'ruleviz_operation';
+    }
+
+    function isStandaloneRulevizBrowserActive() {
+        return Boolean(currentRulevizBrowser);
+    }
+
+    function isStandaloneGraphPaletteViewer() {
+        return isStandaloneContactMapViewer() || isStandaloneRegulatoryViewer();
     }
 
     function getContactMapViewerPalette() {
@@ -100,8 +204,28 @@
             : contactMapViewerPalettes[VIEW_MODE_LIGHT];
     }
 
+    function getRegulatoryViewerPalette() {
+        return currentViewMode === VIEW_MODE_DARK
+            ? regulatoryViewerPalettes[VIEW_MODE_DARK]
+            : regulatoryViewerPalettes[VIEW_MODE_LIGHT];
+    }
+
+    function getRulevizBrowserPalette() {
+        return currentViewMode === VIEW_MODE_DARK
+            ? rulevizBrowserPalettes[VIEW_MODE_DARK]
+            : rulevizBrowserPalettes[VIEW_MODE_LIGHT];
+    }
+
     function getGraphFitPadding() {
-        return isStandaloneContactMapViewer() ? 28 : graphFitPadding;
+        if (isStandaloneContactMapViewer()) {
+            return 28;
+        }
+
+        if (isStandaloneRulevizOperationViewer()) {
+            return 36;
+        }
+
+        return graphFitPadding;
     }
 
     function cssVar(name, fallback = '') {
@@ -284,13 +408,18 @@
             return color;
         }
 
-        const palette = getContactMapViewerPalette();
-        return getHighestContrastColor(backgroundColor, [
-            palette.moleculeLabel,
-            palette.siteLabel,
-            palette.stateLabel,
-            currentViewMode === VIEW_MODE_DARK ? '#f4f7fb' : '#101418'
-        ]);
+        const candidates = [];
+
+        if (isStandaloneContactMapViewer()) {
+            const palette = getContactMapViewerPalette();
+            candidates.push(palette.moleculeLabel, palette.siteLabel, palette.stateLabel);
+        } else if (isStandaloneRegulatoryViewer()) {
+            const palette = getRegulatoryViewerPalette();
+            candidates.push(palette.nodeLabel, palette.arrow, palette.edge);
+        }
+
+        candidates.push(currentViewMode === VIEW_MODE_DARK ? '#f4f7fb' : '#101418');
+        return getHighestContrastColor(backgroundColor, candidates);
     }
 
     function inferHostViewMode() {
@@ -327,7 +456,8 @@
             layoutName: typeof graphView.layoutName === 'string' ? graphView.layoutName : undefined,
             layoutLocked: typeof graphView.layoutLocked === 'boolean' ? graphView.layoutLocked : false,
             showComponents: typeof graphView.showComponents === 'boolean' ? graphView.showComponents : true,
-            showInternalStates: typeof graphView.showInternalStates === 'boolean' ? graphView.showInternalStates : true
+            showInternalStates: typeof graphView.showInternalStates === 'boolean' ? graphView.showInternalStates : true,
+            showRegulatoryRuleBngl: typeof graphView.showRegulatoryRuleBngl === 'boolean' ? graphView.showRegulatoryRuleBngl : false
         };
     }
 
@@ -339,7 +469,8 @@
                 layoutName: currentGraphLayoutName,
                 layoutLocked: graphLayoutLocked,
                 showComponents: showComponents,
-                showInternalStates: showInternalStates
+                showInternalStates: showInternalStates,
+                showRegulatoryRuleBngl: showRegulatoryRuleBngl
             }
         });
     }
@@ -385,7 +516,7 @@
             return color;
         }
 
-        if (isStandaloneContactMapViewer()) {
+        if (isStandaloneGraphPaletteViewer()) {
             return color;
         }
 
@@ -449,6 +580,81 @@
             default:
                 return sourceColor;
         }
+    }
+
+    function getRegulatoryBaseFillColor(sourceColor) {
+        const palette = getRegulatoryViewerPalette();
+        const source = parseColor(sourceColor);
+        const target = parseColor(palette.nodeFill);
+        if (!source || !target) {
+            return palette.nodeFill;
+        }
+
+        let candidate = mixColors(source, target, currentViewMode === VIEW_MODE_DARK ? 0.68 : 0.78);
+        if (currentViewMode === VIEW_MODE_DARK && getRelativeLuminance(candidate) < 0.14) {
+            candidate = mixColors(candidate, { r: 255, g: 255, b: 255, a: candidate.a }, 0.12);
+        }
+        if (currentViewMode === VIEW_MODE_LIGHT && getRelativeLuminance(candidate) > 0.92) {
+            candidate = mixColors(candidate, target, 0.18);
+        }
+
+        return toCssColor(candidate);
+    }
+
+    function getRegulatoryAccentFromSourceColor(sourceColor) {
+        const palette = getRegulatoryViewerPalette();
+        const source = parseColor(sourceColor);
+        if (!source) {
+            return palette.edge;
+        }
+
+        const maxChannel = Math.max(source.r, source.g, source.b);
+        const minChannel = Math.min(source.r, source.g, source.b);
+        const chroma = maxChannel - minChannel;
+        if (chroma < 22) {
+            return palette.edge;
+        }
+
+        if (source.g >= source.r + 18 && source.g >= source.b + 12) {
+            return palette.activatedAccent;
+        }
+
+        if (source.r >= source.g + 24 && source.r >= source.b + 12) {
+            return palette.inhibitedAccent;
+        }
+
+        if (source.r >= 140 && source.g >= 105 && source.b <= Math.min(source.r, source.g) - 12) {
+            return palette.modifiedAccent;
+        }
+
+        if (source.b >= source.r + 12 && source.b >= source.g + 12) {
+            return palette.uncertainAccent;
+        }
+
+        return palette.edge;
+    }
+
+    function getRegulatoryEdgeColor(sourceColor, role) {
+        const palette = getRegulatoryViewerPalette();
+        const source = parseColor(sourceColor);
+        const accent = parseColor(getRegulatoryAccentFromSourceColor(sourceColor));
+        if (!source || !accent) {
+            return role === 'arrow' ? palette.arrow : palette.edge;
+        }
+
+        let candidate = mixColors(source, accent, currentViewMode === VIEW_MODE_DARK ? 0.6 : 0.72);
+        if (role === 'arrow') {
+            const arrowTarget = parseColor(palette.arrow);
+            if (arrowTarget) {
+                candidate = mixColors(candidate, arrowTarget, currentViewMode === VIEW_MODE_DARK ? 0.2 : 0.08);
+            }
+        }
+
+        if (currentViewMode === VIEW_MODE_DARK && getRelativeLuminance(candidate) < 0.34) {
+            candidate = mixColors(candidate, { r: 255, g: 255, b: 255, a: candidate.a }, 0.18);
+        }
+
+        return toCssColor(candidate);
     }
 
     function getCytoscapeShape(graphmlShape, kind) {
@@ -541,6 +747,36 @@
             default:
                 return { width: 90, height: 40 };
         }
+    }
+
+    function getRegulatoryRuleBnglCaptionMetrics(labelText) {
+        const normalizedLabelText = (labelText || '').trim();
+        if (!normalizedLabelText) {
+            return {
+                width: 220,
+                height: 28,
+                labelMaxWidth: 200,
+                fontSize: 11
+            };
+        }
+
+        const lines = normalizedLabelText.split(/\n/);
+        const longestLineLength = lines.reduce((longest, line) => Math.max(longest, line.length), 0);
+        const fontSize = longestLineLength > 96 ? 10 : 11;
+        const width = clampNumber((Math.min(longestLineLength, 88) * 7) + 34, 220, 520);
+        const labelMaxWidth = Math.max(190, width - 24);
+        const approximateCharsPerWrappedLine = Math.max(22, Math.floor(labelMaxWidth / 7));
+        const wrappedLineCount = lines.reduce((count, line) => {
+            return count + Math.max(1, Math.ceil(Math.max(line.length, 1) / approximateCharsPerWrappedLine));
+        }, 0);
+        const height = clampNumber((wrappedLineCount * (fontSize + 4)) + 12, 28, 148);
+
+        return {
+            width: width,
+            height: height,
+            labelMaxWidth: labelMaxWidth,
+            fontSize: fontSize
+        };
     }
 
     function getContactMapMinimumNodeWidth(nodeKind, labelText, hasDirectChildren) {
@@ -671,6 +907,769 @@
         return directChildNodes;
     }
 
+    function getRulevizBrowserNodeKind(sourceColor, shape, parentId) {
+        const normalizedColor = normalizeColorKey(sourceColor);
+        const normalizedShape = (shape || '').toLowerCase();
+
+        if (normalizedColor === '#cc99ff') {
+            return 'operation';
+        }
+
+        if (normalizedColor === '#fff0a7') {
+            return 'state';
+        }
+
+        if (normalizedShape === 'roundrectangle') {
+            return 'rule';
+        }
+
+        return parentId ? 'component' : 'molecule';
+    }
+
+    function getRulevizBrowserNodeShape(nodeKind) {
+        switch (nodeKind) {
+            case 'molecule':
+            case 'component':
+            case 'rule':
+                return 'round-rectangle';
+            case 'state':
+            case 'operation':
+            default:
+                return 'ellipse';
+        }
+    }
+
+    function getRulevizBrowserNodeDimensions(nodeKind, labelText, hasDirectChildren) {
+        const textLength = Math.max((labelText || '').trim().length, 1);
+
+        switch (nodeKind) {
+            case 'molecule':
+                return hasDirectChildren
+                    ? {
+                        width: clampNumber((textLength * 10) + 72, 150, 248),
+                        height: 96
+                    }
+                    : {
+                        width: clampNumber((textLength * 9) + 34, 106, 162),
+                        height: 46
+                    };
+            case 'component':
+                return hasDirectChildren
+                    ? {
+                        width: clampNumber((textLength * 9) + 38, 96, 168),
+                        height: 66
+                    }
+                    : {
+                        width: clampNumber((textLength * 8) + 26, 72, 126),
+                        height: 36
+                    };
+            case 'rule':
+                return {
+                    width: clampNumber((textLength * 9) + 34, 92, 176),
+                    height: 42
+                };
+            case 'operation':
+                return {
+                    width: clampNumber((textLength * 8) + 28, 68, 132),
+                    height: 38
+                };
+            case 'state':
+                return {
+                    width: clampNumber((textLength * 8) + 16, 48, 102),
+                    height: 28
+                };
+            default:
+                return {
+                    width: clampNumber((textLength * 9) + (hasDirectChildren ? 40 : 28), hasDirectChildren ? 94 : 72, hasDirectChildren ? 170 : 132),
+                    height: hasDirectChildren ? 54 : 38
+                };
+        }
+    }
+
+    function getRulevizBrowserNodeLabelValign(nodeKind, hasDirectChildren) {
+        if ((nodeKind === 'molecule' || nodeKind === 'component') && hasDirectChildren) {
+            return 'top';
+        }
+
+        return 'center';
+    }
+
+    function getRulevizBrowserNodeLabelHalign(nodeKind, hasDirectChildren) {
+        if (nodeKind === 'molecule' && hasDirectChildren) {
+            return 'left';
+        }
+
+        return 'center';
+    }
+
+    function getRulevizBrowserNodeLabelJustification(nodeKind, hasDirectChildren) {
+        if (nodeKind === 'molecule' && hasDirectChildren) {
+            return 'left';
+        }
+
+        return 'center';
+    }
+
+    function getRulevizBrowserNodeLabelMarginX(nodeKind, hasDirectChildren, displayWidth) {
+        if (nodeKind === 'molecule' && hasDirectChildren) {
+            return -Math.max(0, (displayWidth / 2) - 24);
+        }
+
+        return 0;
+    }
+
+    function getRulevizBrowserNodeLabelMarginY(nodeKind, hasDirectChildren, displayHeight) {
+        if ((nodeKind === 'molecule' || nodeKind === 'component') && hasDirectChildren) {
+            return -Math.max(0, (displayHeight / 2) - 18);
+        }
+
+        return 0;
+    }
+
+    function getRulevizBrowserNodeLabelMaxWidth(nodeKind, hasDirectChildren, displayWidth) {
+        if ((nodeKind === 'molecule' || nodeKind === 'component') && hasDirectChildren) {
+            return Math.max(72, displayWidth - 26);
+        }
+
+        return Math.max(48, displayWidth - 18);
+    }
+
+    function getRulevizBrowserNodeLabelBackgroundOpacity(nodeKind, hasDirectChildren) {
+        if ((nodeKind === 'molecule' || nodeKind === 'component') && hasDirectChildren) {
+            return 0.94;
+        }
+
+        return 0;
+    }
+
+    function getRulevizBrowserNodeLabelBackgroundPadding(nodeKind, hasDirectChildren) {
+        if (nodeKind === 'molecule' && hasDirectChildren) {
+            return 5;
+        }
+
+        if (nodeKind === 'component' && hasDirectChildren) {
+            return 4;
+        }
+
+        return 0;
+    }
+
+    function getRulevizBrowserCompoundPadding(nodeKind, hasDirectChildren) {
+        if (!hasDirectChildren) {
+            return 0;
+        }
+
+        if (nodeKind === 'molecule') {
+            return 18;
+        }
+
+        if (nodeKind === 'component') {
+            return 12;
+        }
+
+        return 0;
+    }
+
+    function getRulevizBrowserNodeFillColor(nodeKind) {
+        const palette = getRulevizBrowserPalette();
+        switch (nodeKind) {
+            case 'molecule':
+                return palette.moleculeFill;
+            case 'component':
+                return palette.componentFill;
+            case 'rule':
+                return palette.ruleFill;
+            case 'operation':
+                return palette.operationFill;
+            case 'state':
+                return palette.stateFill;
+            default:
+                return palette.componentFill;
+        }
+    }
+
+    function getRulevizBrowserNodeBorderColor(nodeKind) {
+        const palette = getRulevizBrowserPalette();
+        switch (nodeKind) {
+            case 'molecule':
+                return palette.moleculeBorder;
+            case 'component':
+                return palette.componentBorder;
+            case 'rule':
+                return palette.ruleBorder;
+            case 'operation':
+                return palette.operationBorder;
+            case 'state':
+                return palette.stateBorder;
+            default:
+                return palette.componentBorder;
+        }
+    }
+
+    function getRulevizBrowserNodeLabelColor(nodeKind) {
+        const palette = getRulevizBrowserPalette();
+        switch (nodeKind) {
+            case 'molecule':
+                return palette.moleculeLabel;
+            case 'component':
+                return palette.componentLabel;
+            case 'rule':
+                return palette.ruleLabel;
+            case 'operation':
+                return palette.operationLabel;
+            case 'state':
+                return palette.stateLabel;
+            default:
+                return palette.componentLabel;
+        }
+    }
+
+    function getRulevizBrowserGraphHeight(nodeCount) {
+        return clampNumber(198 + (nodeCount * 18), 250, 520);
+    }
+
+    function applyRulevizBrowserContainerTheme() {
+        if (!rulevizBrowser) {
+            return;
+        }
+
+        const palette = getRulevizBrowserPalette();
+        rulevizBrowser.style.setProperty('--ruleviz-browser-background', palette.background);
+        rulevizBrowser.style.setProperty('--ruleviz-browser-row-background', palette.rowBackground);
+        rulevizBrowser.style.setProperty('--ruleviz-browser-row-border', palette.rowBorder);
+        rulevizBrowser.style.setProperty('--ruleviz-browser-row-shadow', palette.rowShadow);
+        rulevizBrowser.style.setProperty('--ruleviz-browser-canvas-background', palette.canvasBackground);
+        rulevizBrowser.style.setProperty('--ruleviz-browser-canvas-border', palette.canvasBorder);
+        rulevizBrowser.style.setProperty('--ruleviz-browser-label-foreground', palette.labelForeground);
+        rulevizBrowser.style.setProperty('--ruleviz-browser-muted-foreground', palette.mutedForeground);
+        rulevizBrowser.style.background = palette.background;
+    }
+
+    function destroyRulevizBrowser() {
+        if (currentRulevizBrowser && Array.isArray(currentRulevizBrowser.cards)) {
+            currentRulevizBrowser.cards.forEach((card) => {
+                if (card.cy) {
+                    card.cy.destroy();
+                }
+            });
+        }
+
+        currentRulevizBrowser = null;
+
+        if (rulevizBrowser) {
+            rulevizBrowser.innerHTML = '';
+            rulevizBrowser.hidden = true;
+        }
+
+        if (network) {
+            network.hidden = false;
+        }
+    }
+
+    function configureToolbarForRulevizBrowser(isActive) {
+        const layoutSelect = document.getElementById('layout_select');
+        const layoutLockButton = document.getElementById('layout_lock_button');
+        const fitButton = document.getElementById('fit_button');
+        const exportPngButton = document.getElementById('png_button');
+        const exportGraphmlButton = document.getElementById('graphml_button');
+        const presetOption = layoutSelect ? layoutSelect.querySelector('option[value="preset"]') : null;
+
+        if (layoutLockButton) {
+            layoutLockButton.hidden = isActive;
+        }
+
+        if (fitButton) {
+            fitButton.hidden = isActive;
+        }
+
+        if (exportPngButton) {
+            exportPngButton.hidden = isActive;
+        }
+
+        if (exportGraphmlButton) {
+            exportGraphmlButton.hidden = isActive;
+        }
+
+        if (layoutSelect) {
+            layoutSelect.disabled = false;
+            layoutSelect.title = '';
+        }
+
+        if (presetOption) {
+            presetOption.hidden = isActive;
+            presetOption.disabled = isActive;
+        }
+    }
+
+    function parseRulevizBrowserGraphml(graphmlText) {
+        const xmlParser = new DOMParser();
+        const xmlDoc = xmlParser.parseFromString(graphmlText, 'text/xml');
+        const cytoElements = {
+            nodes: [],
+            edges: []
+        };
+        let nodeCount = 0;
+
+        function addRulevizNode(node, parentId) {
+            const nodeId = node.getAttribute('id');
+            if (!nodeId) {
+                return;
+            }
+
+            let backgroundColor = node.getElementsByTagName('y:Fill').item(0);
+            backgroundColor = backgroundColor ? backgroundColor.getAttribute('color') : null;
+            backgroundColor = backgroundColor || '#999999';
+
+            let border = node.getElementsByTagName('y:BorderStyle').item(0);
+            let borderWidth = border ? border.getAttribute('width') : null;
+            let borderColor = border ? border.getAttribute('color') : null;
+            borderWidth = borderWidth || '1';
+            borderColor = borderColor || '#000000';
+
+            let shape = node.getElementsByTagName('y:Shape').item(0);
+            shape = shape ? shape.getAttribute('type') : null;
+
+            let label = node.getElementsByTagName('y:NodeLabel').item(0);
+            let labelText = label ? label.textContent : '';
+            let labelColor = label ? label.getAttribute('textColor') : null;
+            let labelWeight = label ? label.getAttribute('fontStyle') : null;
+            let labelFontSize = label ? parseFloat(label.getAttribute('fontSize')) : NaN;
+            labelColor = labelColor || '#000000';
+            labelWeight = labelWeight === 'bold' ? 'bold' : 'normal';
+            labelFontSize = Number.isFinite(labelFontSize) && labelFontSize > 0 ? labelFontSize : 12;
+
+            const hasDirectChildren = getDirectChildNodeElements(node).length > 0;
+            const nodeKind = getRulevizBrowserNodeKind(backgroundColor, shape, parentId);
+            const dimensions = getRulevizBrowserNodeDimensions(nodeKind, labelText, hasDirectChildren);
+            const labelValign = getRulevizBrowserNodeLabelValign(nodeKind, hasDirectChildren);
+            const labelHalign = getRulevizBrowserNodeLabelHalign(nodeKind, hasDirectChildren);
+            const labelJustification = getRulevizBrowserNodeLabelJustification(nodeKind, hasDirectChildren);
+            const labelMarginX = getRulevizBrowserNodeLabelMarginX(nodeKind, hasDirectChildren, dimensions.width);
+            const labelMarginY = getRulevizBrowserNodeLabelMarginY(nodeKind, hasDirectChildren, dimensions.height);
+            const labelBackgroundOpacity = getRulevizBrowserNodeLabelBackgroundOpacity(nodeKind, hasDirectChildren);
+            const labelBackgroundPadding = getRulevizBrowserNodeLabelBackgroundPadding(nodeKind, hasDirectChildren);
+            const compoundPadding = getRulevizBrowserCompoundPadding(nodeKind, hasDirectChildren);
+            const labelMaxWidth = getRulevizBrowserNodeLabelMaxWidth(nodeKind, hasDirectChildren, dimensions.width);
+
+            cytoElements.nodes.push({
+                data: {
+                    id: nodeId,
+                    parent: parentId || undefined,
+                    nodeKind: nodeKind,
+                    backgroundColor: backgroundColor,
+                    displayBackgroundColor: backgroundColor,
+                    borderColor: borderColor,
+                    displayBorderColor: borderColor,
+                    borderWidth: borderWidth,
+                    displayBorderWidth: Number.isFinite(parseFloat(borderWidth)) ? parseFloat(borderWidth) : 1,
+                    nodeShape: getRulevizBrowserNodeShape(nodeKind),
+                    width: dimensions.width,
+                    height: dimensions.height,
+                    labelText: labelText,
+                    displayLabelBackgroundColor: labelBackgroundOpacity > 0 ? backgroundColor : 'transparent',
+                    displayLabelColor: labelColor,
+                    labelWeight: nodeKind === 'rule' || (nodeKind === 'molecule' && hasDirectChildren) ? 'bold' : labelWeight,
+                    labelFontSize: Math.max(labelFontSize, nodeKind === 'state' ? 11 : (nodeKind === 'molecule' && hasDirectChildren ? 13 : 12)),
+                    labelValign: labelValign,
+                    labelHalign: labelHalign,
+                    labelJustification: labelJustification,
+                    labelMarginX: labelMarginX,
+                    labelMarginY: labelMarginY,
+                    labelBackgroundOpacity: labelBackgroundOpacity,
+                    labelBackgroundPadding: labelBackgroundPadding,
+                    labelMaxWidth: labelMaxWidth,
+                    compoundPadding: compoundPadding,
+                    minCompoundWidth: hasDirectChildren ? dimensions.width : 0,
+                    minCompoundHeight: hasDirectChildren ? dimensions.height : 0,
+                    minZoomedFontSize: 0
+                }
+            });
+            nodeCount += 1;
+
+            if (node.getAttribute('yfiles.foldertype') === 'group' && hasDirectChildren) {
+                addRulevizChildNodes(node, nodeId);
+            }
+        }
+
+        function addRulevizChildNodes(root, parentId) {
+            Array.from(root.children || []).forEach((element) => {
+                if (element.tagName === 'graph') {
+                    addRulevizChildNodes(element, parentId);
+                    return;
+                }
+
+                if (element.tagName === 'node') {
+                    addRulevizNode(element, parentId);
+                }
+            });
+        }
+
+        const graphmlRoot = xmlDoc.getElementsByTagName('graphml').item(0);
+        if (graphmlRoot) {
+            addRulevizChildNodes(graphmlRoot, null);
+        }
+
+        Array.from(xmlDoc.getElementsByTagName('edge')).forEach((edge, index) => {
+            const source = edge.getAttribute('source');
+            const target = edge.getAttribute('target');
+            if (!source || !target) {
+                return;
+            }
+
+            let line = edge.getElementsByTagName('y:LineStyle').item(0);
+            let lineWidth = line ? line.getAttribute('width') : null;
+            let lineColor = line ? line.getAttribute('color') : null;
+            lineWidth = lineWidth || '1';
+            lineColor = lineColor || '#000000';
+
+            let arrow = edge.getElementsByTagName('y:Arrows').item(0);
+            arrow = arrow ? arrow.getAttribute('target') : null;
+
+            cytoElements.edges.push({
+                data: {
+                    id: edge.getAttribute('id') || `e${index}`,
+                    source: source,
+                    target: target,
+                    lineWidth: lineWidth,
+                    displayLineColor: lineColor,
+                    displayArrowColor: lineColor,
+                    arrow: arrow === 'standard' ? 'triangle' : 'none'
+                }
+            });
+        });
+
+        return {
+            elements: cytoElements,
+            nodeCount: nodeCount
+        };
+    }
+
+    function createRulevizBrowserStylesheet() {
+        return [
+            {
+                selector: 'node',
+                style: {
+                    'background-color': 'data(displayBackgroundColor)',
+                    'border-width': 'data(displayBorderWidth)',
+                    'border-color': 'data(displayBorderColor)',
+                    'shape': 'data(nodeShape)',
+                    'width': 'data(width)',
+                    'height': 'data(height)',
+                    'label': 'data(labelText)',
+                    'color': 'data(displayLabelColor)',
+                    'font-weight': 'data(labelWeight)',
+                    'font-size': 'data(labelFontSize)',
+                    'text-valign': 'data(labelValign)',
+                    'text-halign': 'data(labelHalign)',
+                    'text-justification': 'data(labelJustification)',
+                    'text-margin-x': 'data(labelMarginX)',
+                    'text-margin-y': 'data(labelMarginY)',
+                    'text-background-color': 'data(displayLabelBackgroundColor)',
+                    'text-background-opacity': 'data(labelBackgroundOpacity)',
+                    'text-background-padding': 'data(labelBackgroundPadding)',
+                    'text-background-shape': 'round-rectangle',
+                    'text-wrap': 'wrap',
+                    'text-max-width': 'data(labelMaxWidth)',
+                    'min-zoomed-font-size': 'data(minZoomedFontSize)'
+                }
+            },
+            {
+                selector: ':parent',
+                style: {
+                    'padding': 'data(compoundPadding)',
+                    'min-width': 'data(minCompoundWidth)',
+                    'min-height': 'data(minCompoundHeight)',
+                    'compound-sizing-wrt-labels': 'include'
+                }
+            },
+            {
+                selector: 'edge',
+                style: {
+                    'width': 'data(lineWidth)',
+                    'line-color': 'data(displayLineColor)',
+                    'target-arrow-color': 'data(displayArrowColor)',
+                    'target-arrow-shape': 'data(arrow)',
+                    'curve-style': 'bezier'
+                }
+            }
+        ];
+    }
+
+    function createRulevizBrowserLayoutOptions(layoutName) {
+        switch (layoutName) {
+            case 'grid':
+                return {
+                    name: 'grid',
+                    fit: true,
+                    padding: 22,
+                    avoidOverlap: true,
+                    avoidOverlapPadding: 22,
+                    nodeDimensionsIncludeLabels: true,
+                    animate: false
+                };
+            case 'circle':
+                return {
+                    name: 'circle',
+                    fit: true,
+                    padding: 22,
+                    avoidOverlap: true,
+                    nodeDimensionsIncludeLabels: true,
+                    spacingFactor: 1.12,
+                    animate: false
+                };
+            case 'concentric':
+                return {
+                    name: 'concentric',
+                    fit: true,
+                    padding: 22,
+                    avoidOverlap: true,
+                    nodeDimensionsIncludeLabels: true,
+                    minNodeSpacing: 54,
+                    spacingFactor: 1.1,
+                    animate: false
+                };
+            case 'cose':
+                return {
+                    name: 'cose',
+                    fit: true,
+                    padding: 22,
+                    animate: false,
+                    nodeDimensionsIncludeLabels: true,
+                    componentSpacing: 92,
+                    nodeOverlap: 16,
+                    idealEdgeLength: 88,
+                    edgeElasticity: 90,
+                    nestingFactor: 0.95,
+                    gravity: 1,
+                    numIter: 1500,
+                    initialTemp: 140,
+                    coolingFactor: 0.96,
+                    minTemp: 1
+                };
+            case 'breadthfirst':
+            default:
+                return {
+                    name: 'breadthfirst',
+                    fit: true,
+                    padding: 22,
+                    directed: true,
+                    animate: false,
+                    avoidOverlap: true,
+                    nodeDimensionsIncludeLabels: true,
+                    spacingFactor: 1.16
+                };
+        }
+    }
+
+    function applyRulevizBrowserTheme() {
+        if (!isStandaloneRulevizBrowserActive()) {
+            return;
+        }
+
+        applyRulevizBrowserContainerTheme();
+        const palette = getRulevizBrowserPalette();
+
+        currentRulevizBrowser.cards.forEach((card) => {
+            if (!card || !card.cy) {
+                return;
+            }
+
+            if (card.shell) {
+                card.shell.style.background = palette.canvasBackground;
+                card.shell.style.borderColor = palette.canvasBorder;
+            }
+
+            card.cy.batch(() => {
+                card.cy.nodes().forEach((node) => {
+                    const nodeKind = node.data('nodeKind') || 'component';
+                    const fill = getRulevizBrowserNodeFillColor(nodeKind);
+                    const border = getRulevizBrowserNodeBorderColor(nodeKind);
+                    const labelColor = ensureTextContrast(
+                        getRulevizBrowserNodeLabelColor(nodeKind),
+                        fill,
+                        4.5
+                    );
+
+                    node.data('displayBackgroundColor', fill);
+                    node.data('displayBorderColor', border);
+                    node.data('displayLabelColor', labelColor);
+                    node.data(
+                        'displayLabelBackgroundColor',
+                        node.isParent() ? fill : 'transparent'
+                    );
+                });
+
+                card.cy.edges().forEach((edge) => {
+                    edge.data('displayLineColor', palette.edge);
+                    edge.data('displayArrowColor', palette.arrow);
+                });
+            });
+
+            card.cy.style().update();
+            card.cy.resize();
+        });
+    }
+
+    function applyRulevizBrowserBnglVisibility() {
+        if (!rulevizBrowser) {
+            return;
+        }
+
+        rulevizBrowser.querySelectorAll('.ruleviz-browser-rule-bngl').forEach((element) => {
+            element.classList.toggle(RULEVIZ_BROWSER_RULE_BNGL_HIDDEN_CLASS, !showRegulatoryRuleBngl);
+        });
+
+        updateRegulatoryRuleBnglButton(Boolean(currentRulevizBrowser && currentRulevizBrowser.showRuleBnglAvailable));
+    }
+
+    function applyRulevizBrowserLayout(layoutName, options = {}) {
+        if (!isStandaloneRulevizBrowserActive()) {
+            return;
+        }
+
+        const availableLayouts = currentRulevizBrowser.layoutFactories;
+        const normalizedLayoutName = normalizeLayoutSelection(
+            layoutName,
+            false,
+            currentRulevizBrowser.defaultLayoutName,
+            availableLayouts
+        );
+        currentGraphLayoutName = normalizedLayoutName;
+
+        if (options.persist !== false) {
+            persistGraphViewState();
+        }
+
+        const layoutSelect = document.getElementById('layout_select');
+        if (layoutSelect) {
+            layoutSelect.value = normalizedLayoutName;
+        }
+
+        currentRulevizBrowser.cards.forEach((card) => {
+            if (!card || !card.cy) {
+                return;
+            }
+
+            card.cy.resize();
+            const layout = card.cy.layout(createRulevizBrowserLayoutOptions(normalizedLayoutName));
+            layout.run();
+        });
+    }
+
+    function renderRulevizBrowser(rows) {
+        destroyRulevizBrowser();
+
+        if (!rulevizBrowser || !network) {
+            return;
+        }
+
+        const safeRows = Array.isArray(rows)
+            ? rows.filter((row) => {
+                return row
+                    && typeof row.graphmlText === 'string'
+                    && row.graphmlText.trim().length > 0
+                    && typeof row.displayLabel === 'string'
+                    && row.displayLabel.trim().length > 0;
+            })
+            : [];
+
+        network.hidden = true;
+        rulevizBrowser.hidden = false;
+        rulevizBrowser.innerHTML = '';
+
+        const intro = document.createElement('section');
+        intro.className = 'ruleviz-browser-intro';
+        intro.innerHTML = `
+            <div class="ruleviz-browser-intro-title">${page_title}</div>
+            <div class="ruleviz-browser-intro-subtitle">Standalone RuleViz, one rule per row.</div>
+        `;
+        rulevizBrowser.appendChild(intro);
+
+        const table = document.createElement('section');
+        table.className = 'ruleviz-browser-table';
+        rulevizBrowser.appendChild(table);
+
+        const cards = [];
+
+        if (safeRows.length === 0) {
+            const emptyState = document.createElement('div');
+            emptyState.className = 'ruleviz-browser-empty';
+            emptyState.textContent = 'No standalone RuleViz rows were available for this results folder.';
+            table.appendChild(emptyState);
+        } else {
+            safeRows.forEach((row) => {
+                const parsedGraph = parseRulevizBrowserGraphml(row.graphmlText);
+
+                const rowElement = document.createElement('article');
+                rowElement.className = 'ruleviz-browser-row';
+
+                const metaElement = document.createElement('div');
+                metaElement.className = 'ruleviz-browser-meta';
+
+                const labelElement = document.createElement('div');
+                labelElement.className = 'ruleviz-browser-rule-label';
+                labelElement.textContent = row.displayLabel;
+                metaElement.appendChild(labelElement);
+
+                if (row.bnglText) {
+                    const bnglElement = document.createElement('pre');
+                    bnglElement.className = 'ruleviz-browser-rule-bngl';
+                    bnglElement.textContent = row.bnglText;
+                    metaElement.appendChild(bnglElement);
+                }
+
+                const graphCell = document.createElement('div');
+                graphCell.className = 'ruleviz-browser-graph-cell';
+
+                const graphShell = document.createElement('div');
+                graphShell.className = 'ruleviz-browser-graph-shell';
+                graphShell.style.height = `${getRulevizBrowserGraphHeight(parsedGraph.nodeCount)}px`;
+
+                const graphContainer = document.createElement('div');
+                graphContainer.className = 'ruleviz-browser-graph';
+                graphShell.appendChild(graphContainer);
+                graphCell.appendChild(graphShell);
+
+                rowElement.appendChild(metaElement);
+                rowElement.appendChild(graphCell);
+                table.appendChild(rowElement);
+
+                const cy = cytoscape({
+                    container: graphContainer,
+                    elements: parsedGraph.elements,
+                    style: createRulevizBrowserStylesheet(),
+                    layout: {
+                        name: 'preset',
+                        fit: false
+                    }
+                });
+
+                cards.push({
+                    cy: cy,
+                    shell: graphShell,
+                    row: row
+                });
+            });
+        }
+
+        currentRulevizBrowser = {
+            cards: cards,
+            showRuleBnglAvailable: safeRows.some((row) => typeof row.bnglText === 'string' && row.bnglText.trim().length > 0),
+            defaultLayoutName: 'breadthfirst',
+            layoutFactories: {
+                breadthfirst: true,
+                grid: true,
+                circle: true,
+                concentric: true,
+                cose: true
+            }
+        };
+
+        configureToolbarForRulevizBrowser(true);
+        applyRulevizBrowserTheme();
+        applyRulevizBrowserBnglVisibility();
+    }
+
     function updateComponentsButton() {
         const toggleComponentsButton = document.getElementById('toggle_components_button');
         if (!toggleComponentsButton) {
@@ -709,9 +1708,46 @@
         toggleInternalStatesButton.setAttribute('aria-label', label);
     }
 
+    function updateRegulatoryRuleBnglButton(isAvailable) {
+        const toggleRuleBnglButton = document.getElementById('toggle_rule_bngl_button');
+        if (!toggleRuleBnglButton) {
+            return;
+        }
+
+        toggleRuleBnglButton.hidden = !isAvailable;
+        toggleRuleBnglButton.disabled = !isAvailable;
+
+        if (!isAvailable) {
+            return;
+        }
+
+        const label = showRegulatoryRuleBngl ? 'Hide Rule BNGL' : 'Show Rule BNGL';
+        toggleRuleBnglButton.textContent = label;
+        toggleRuleBnglButton.setAttribute('aria-label', label);
+        if (isStandaloneRulevizBrowserActive()) {
+            toggleRuleBnglButton.title = showRegulatoryRuleBngl
+                ? 'Hide the full BNGL text for each RuleViz row.'
+                : 'Show the full BNGL text for each RuleViz row.';
+            return;
+        }
+
+        toggleRuleBnglButton.title = showRegulatoryRuleBngl
+            ? 'Show the compact BioNetGen rule labels on regulatory-rule nodes.'
+            : 'Show the full BNGL rule text below the regulatory-rule nodes.';
+    }
+
     function updateLayoutLockButton(layoutSelect) {
         const layoutLockButton = document.getElementById('layout_lock_button');
         if (!layoutLockButton) {
+            return;
+        }
+
+        if (isStandaloneRulevizBrowserActive()) {
+            layoutLockButton.hidden = true;
+            if (layoutSelect) {
+                layoutSelect.disabled = false;
+                layoutSelect.title = '';
+            }
             return;
         }
 
@@ -740,53 +1776,97 @@
     }
 
     function getNodeBaseBackgroundColor(node) {
+        if (node.data('isRegulatoryRuleBnglCaption')) {
+            return 'transparent';
+        }
+
         const sourceColor = node.data('backgroundColor');
-        return useContactMapViewerPalette
-            ? getContactMapBaseFillColor(node.data('nodeKind'), sourceColor)
-            : sourceColor;
+        if (isStandaloneContactMapViewer()) {
+            return getContactMapBaseFillColor(node.data('nodeKind'), sourceColor);
+        }
+
+        if (isStandaloneRegulatoryViewer()) {
+            return getRegulatoryBaseFillColor(sourceColor);
+        }
+
+        return sourceColor;
     }
 
     function getNodeBaseBorderColor(node) {
-        const sourceColor = node.data('borderColor');
-        if (!useContactMapViewerPalette) {
-            return sourceColor;
+        if (node.data('isRegulatoryRuleBnglCaption')) {
+            return 'transparent';
         }
 
-        return getContactMapBaseBorderColor(node.data('nodeKind'), sourceColor);
+        const sourceColor = node.data('borderColor');
+        if (isStandaloneContactMapViewer()) {
+            return getContactMapBaseBorderColor(node.data('nodeKind'), sourceColor);
+        }
+
+        if (isStandaloneRegulatoryViewer()) {
+            return getRegulatoryViewerPalette().nodeBorder;
+        }
+
+        return sourceColor;
     }
 
     function getNodeBaseLabelColor(node) {
-        const sourceColor = node.data('labelColor');
-        if (!useContactMapViewerPalette) {
-            return sourceColor;
+        if (node.data('isRegulatoryRuleBnglCaption')) {
+            return isStandaloneRegulatoryViewer()
+                ? getRegulatoryViewerPalette().nodeLabel
+                : (node.data('labelColor') || '#000000');
         }
 
-        return getContactMapBaseLabelColor(node.data('nodeKind'), sourceColor);
+        const sourceColor = node.data('labelColor');
+        if (isStandaloneContactMapViewer()) {
+            return getContactMapBaseLabelColor(node.data('nodeKind'), sourceColor);
+        }
+
+        if (isStandaloneRegulatoryViewer()) {
+            return getRegulatoryViewerPalette().nodeLabel;
+        }
+
+        return sourceColor;
     }
 
     function getEdgeBaseLineColor(edge) {
         const sourceColor = edge.data('lineColor');
-        if (!useContactMapViewerPalette) {
-            return sourceColor;
+        if (isStandaloneContactMapViewer()) {
+            return getContactMapViewerPalette().edge;
         }
 
-        return getContactMapViewerPalette().edge;
+        if (isStandaloneRegulatoryViewer()) {
+            return getRegulatoryEdgeColor(sourceColor, 'edge');
+        }
+
+        return sourceColor;
     }
 
     function getEdgeBaseArrowColor(edge) {
         const sourceColor = edge.data('arrowColor');
-        if (!useContactMapViewerPalette) {
-            return sourceColor || edge.data('lineColor');
+        if (isStandaloneContactMapViewer()) {
+            return getContactMapViewerPalette().arrow;
         }
 
-        return getContactMapViewerPalette().arrow;
+        if (isStandaloneRegulatoryViewer()) {
+            return getRegulatoryEdgeColor(sourceColor || edge.data('lineColor'), 'arrow');
+        }
+
+        return sourceColor || edge.data('lineColor');
     }
 
     function getNodeDisplayLabelColor(node) {
+        if (node.data('isRegulatoryRuleBnglCaption') && isStandaloneRegulatoryViewer()) {
+            return ensureTextContrast(
+                getRegulatoryViewerPalette().nodeLabel,
+                getRegulatoryViewerPalette().background,
+                5
+            );
+        }
+
         const backgroundColor = getNodeBaseBackgroundColor(node);
         let labelColor = getNodeBaseLabelColor(node);
 
-        if (!isStandaloneContactMapViewer() && currentViewMode === VIEW_MODE_DARK && isColorDark(backgroundColor)) {
+        if (!isStandaloneGraphPaletteViewer() && currentViewMode === VIEW_MODE_DARK && isColorDark(backgroundColor)) {
             labelColor = liftColorForDarkMode(labelColor, 0.62);
         }
 
@@ -806,15 +1886,38 @@
         return getNodeBaseBackgroundColor(node);
     }
 
-    function applyStandaloneContactMapCanvasTheme() {
+    function applyStandaloneGraphCanvasTheme() {
         const networkWrapper = document.getElementById('network_wrapper');
 
-        if (!network || !networkWrapper) {
+        if (!networkWrapper) {
+            return;
+        }
+
+        if (isStandaloneRulevizBrowserActive()) {
+            const palette = getRulevizBrowserPalette();
+            applyRulevizBrowserContainerTheme();
+            networkWrapper.style.background = palette.background;
+            if (network) {
+                network.style.background = '';
+                network.style.backgroundColor = '';
+            }
+            return;
+        }
+
+        if (!network) {
             return;
         }
 
         if (isStandaloneContactMapViewer()) {
             const palette = getContactMapViewerPalette();
+            network.style.background = palette.background;
+            network.style.backgroundColor = palette.background;
+            networkWrapper.style.background = palette.background;
+            return;
+        }
+
+        if (isStandaloneRegulatoryViewer()) {
+            const palette = getRegulatoryViewerPalette();
             network.style.background = palette.background;
             network.style.backgroundColor = palette.background;
             networkWrapper.style.background = palette.background;
@@ -827,8 +1930,14 @@
     }
 
     function applyGraphTheme() {
+        if (isStandaloneRulevizBrowserActive()) {
+            applyRulevizBrowserTheme();
+            applyStandaloneGraphCanvasTheme();
+            return;
+        }
+
         if (!currentCy) {
-            applyStandaloneContactMapCanvasTheme();
+            applyStandaloneGraphCanvasTheme();
             return;
         }
 
@@ -847,7 +1956,7 @@
         });
 
         currentCy.style().update();
-        applyStandaloneContactMapCanvasTheme();
+        applyStandaloneGraphCanvasTheme();
     }
 
     function applyContactMapStructureVisibility() {
@@ -2216,6 +3325,7 @@
 
     function applyBodyViewMode() {
         const useOverridePalette = currentViewMode !== hostViewMode;
+        document.body.dataset.currentViewMode = currentViewMode;
 
         if (useOverridePalette) {
             document.body.dataset.viewMode = currentViewMode;
@@ -2502,15 +3612,80 @@
                 }
 
                 break;
+            case 'ruleviz-browser':
+                const persistedRulevizBrowserViewState = resolveInitialGraphViewState();
+                graphKind = typeof message.graphKind === 'string' ? message.graphKind : 'ruleviz_operation';
+                graphHasComponents = false;
+                graphHasInternalStates = false;
+                standaloneGraphPaletteKind = message.standaloneGraphPaletteKind === 'ruleviz_operation'
+                    ? 'ruleviz_operation'
+                    : null;
+                showComponents = true;
+                showInternalStates = true;
+                showRegulatoryRuleBngl = persistedRulevizBrowserViewState.showRegulatoryRuleBngl;
+                currentGraphLayoutName = persistedRulevizBrowserViewState.layoutName || 'breadthfirst';
+                graphLayoutLocked = false;
+
+                if (currentCy) {
+                    currentCy.destroy();
+                    currentCy = null;
+                }
+
+                renderRulevizBrowser(message.rows);
+
+                const rulevizLayoutSelect = document.getElementById('layout_select');
+                const rulevizToggleRuleBnglButton = document.getElementById('toggle_rule_bngl_button');
+
+                if (rulevizLayoutSelect) {
+                    rulevizLayoutSelect.onchange = function () {
+                        applyRulevizBrowserLayout(rulevizLayoutSelect.value);
+                    };
+                }
+
+                if (rulevizToggleRuleBnglButton) {
+                    rulevizToggleRuleBnglButton.onclick = function () {
+                        showRegulatoryRuleBngl = !showRegulatoryRuleBngl;
+                        applyRulevizBrowserBnglVisibility();
+                        persistGraphViewState();
+                    };
+                }
+
+                updateComponentsButton();
+                updateInternalStatesButton();
+                updateLayoutLockButton(rulevizLayoutSelect);
+                applyStandaloneGraphCanvasTheme();
+
+                requestAnimationFrame(() => {
+                    if (!isStandaloneRulevizBrowserActive()) {
+                        return;
+                    }
+
+                    applyRulevizBrowserLayout(currentGraphLayoutName, { persist: false });
+                    applyRulevizBrowserBnglVisibility();
+                });
+
+                break;
             case 'network':
                 // parse GraphML & render with cytoscape.js
                 const persistedGraphViewState = resolveInitialGraphViewState();
+                destroyRulevizBrowser();
+                configureToolbarForRulevizBrowser(false);
                 graphKind = typeof message.graphKind === 'string' ? message.graphKind : 'other';
                 graphHasComponents = false;
                 graphHasInternalStates = false;
-                useContactMapViewerPalette = Boolean(message.useContactMapViewerPalette);
+                standaloneGraphPaletteKind = (message.standaloneGraphPaletteKind === 'contactmap'
+                    || message.standaloneGraphPaletteKind === 'regulatory'
+                    || message.standaloneGraphPaletteKind === 'ruleviz_operation')
+                    ? message.standaloneGraphPaletteKind
+                    : (message.useContactMapViewerPalette ? 'contactmap' : null);
+                const regulatoryRuleBnglByLabel = (message.regulatoryRuleBnglByLabel && typeof message.regulatoryRuleBnglByLabel === 'object')
+                    ? Object.fromEntries(Object.entries(message.regulatoryRuleBnglByLabel).filter(([label, text]) => {
+                        return typeof label === 'string' && typeof text === 'string' && label.trim().length > 0 && text.trim().length > 0;
+                    }))
+                    : {};
                 showComponents = persistedGraphViewState.showComponents;
                 showInternalStates = persistedGraphViewState.showInternalStates;
+                showRegulatoryRuleBngl = persistedGraphViewState.showRegulatoryRuleBngl;
                 currentGraphLayoutName = persistedGraphViewState.layoutName || 'preset';
                 graphLayoutLocked = persistedGraphViewState.layoutLocked;
 
@@ -2591,6 +3766,8 @@
                     let nodeHeight = NaN;
                     const nodeKind = graphKind === 'contactmap' ? getContactMapNodeKind(backgroundColor) : 'other';
                     const hasDirectChildren = getDirectChildNodeElements(node).length > 0;
+                    const isRegulatoryProcessNode = graphKind === 'regulatory'
+                        && (shape || '').toLowerCase() === 'ellipse';
                     if (layout) {
                         specifiedPosition = {
                             x: parseFloat(layout.getAttribute("x")),
@@ -2603,6 +3780,15 @@
                     const defaultNodeWidth = defaultNodeDimensions.width;
                     const defaultNodeHeight = defaultNodeDimensions.height;
                     const isStandaloneContactMapStyling = isStandaloneContactMapViewer();
+                    const regulatoryRuleBnglText = isRegulatoryProcessNode
+                        ? (regulatoryRuleBnglByLabel[labelText.trim()] || '')
+                        : '';
+                    const regulatoryRuleBnglCaptionId = regulatoryRuleBnglText
+                        ? `${node.id}__rule_bngl_caption`
+                        : '';
+                    const regulatoryRuleBnglCaptionMetrics = regulatoryRuleBnglText
+                        ? getRegulatoryRuleBnglCaptionMetrics(regulatoryRuleBnglText)
+                        : null;
                     const minimumNodeWidth = isStandaloneContactMapStyling
                         ? getContactMapMinimumNodeWidth(nodeKind, labelText, hasDirectChildren)
                         : defaultNodeWidth;
@@ -2619,7 +3805,7 @@
                     const nodeShape = getCytoscapeShape(shape, nodeKind);
                     const minZoomedFontSize = isStandaloneContactMapStyling
                         ? getContactMapMinZoomedFontSize(nodeKind)
-                        : (graphKind === 'contactmap' ? 0 : 12);
+                        : (graphKind === 'contactmap' ? 0 : (isStandaloneRegulatoryViewer() ? 0 : 12));
                     if (isStandaloneContactMapStyling) {
                         labelFontSize = getContactMapLabelFontSize(
                             nodeKind,
@@ -2683,14 +3869,18 @@
                                 width: displayWidth,
                                 height: displayHeight,
                                 labelText: labelText,
+                                defaultLabelText: labelText,
                                 labelColor: labelColor,
                                 displayLabelColor: labelColor,
                                 displayLabelBackgroundColor: isStandaloneContactMapStyling
                                     ? getContactMapBaseFillColor(nodeKind, backgroundColor)
                                     : 'transparent',
                                 labelWeight: labelWeight,
+                                defaultLabelWeight: labelWeight,
                                 labelFontSize: labelFontSize,
+                                defaultLabelFontSize: labelFontSize,
                                 labelMaxWidth: labelMaxWidth,
+                                defaultLabelMaxWidth: labelMaxWidth,
                                 labelValign: labelValign,
                                 labelHalign: labelHalign,
                                 labelJustification: labelJustification,
@@ -2703,10 +3893,66 @@
                                 minCompoundHeight: hasDirectChildren ? displayHeight : 0,
                                 minZoomedFontSize: minZoomedFontSize,
                                 nodeKind: nodeKind,
+                                isRegulatoryProcessNode: isRegulatoryProcessNode,
+                                regulatoryRuleBnglText: regulatoryRuleBnglText,
+                                regulatoryRuleBnglCaptionId: regulatoryRuleBnglCaptionId,
+                                defaultWidth: displayWidth,
+                                defaultHeight: displayHeight,
                                 nodeOrder: nodeOrderCounter,
                                 specifiedPosition: specifiedPosition},
                         position: position}
                     );
+                    if (regulatoryRuleBnglCaptionMetrics && regulatoryRuleBnglCaptionId) {
+                        cytoElements["nodes"].push(
+                            {data: {id: regulatoryRuleBnglCaptionId,
+                                    backgroundColor: 'transparent',
+                                    displayBackgroundColor: 'transparent',
+                                    borderWidth: 0,
+                                    displayBorderWidth: 0,
+                                    borderColor: 'transparent',
+                                    displayBorderColor: 'transparent',
+                                    nodeShape: 'round-rectangle',
+                                    width: regulatoryRuleBnglCaptionMetrics.width,
+                                    height: regulatoryRuleBnglCaptionMetrics.height,
+                                    labelText: regulatoryRuleBnglText,
+                                    defaultLabelText: regulatoryRuleBnglText,
+                                    labelColor: '#000000',
+                                    displayLabelColor: '#000000',
+                                    displayLabelBackgroundColor: 'transparent',
+                                    labelWeight: 'normal',
+                                    defaultLabelWeight: 'normal',
+                                    labelFontSize: regulatoryRuleBnglCaptionMetrics.fontSize,
+                                    defaultLabelFontSize: regulatoryRuleBnglCaptionMetrics.fontSize,
+                                    labelMaxWidth: regulatoryRuleBnglCaptionMetrics.labelMaxWidth,
+                                    defaultLabelMaxWidth: regulatoryRuleBnglCaptionMetrics.labelMaxWidth,
+                                    labelValign: 'center',
+                                    labelHalign: 'center',
+                                    labelJustification: 'center',
+                                    labelMarginX: 0,
+                                    labelMarginY: 0,
+                                    labelBackgroundOpacity: 0,
+                                    labelBackgroundPadding: 0,
+                                    compoundPadding: 0,
+                                    minCompoundWidth: 0,
+                                    minCompoundHeight: 0,
+                                    minZoomedFontSize: 0,
+                                    nodeKind: 'other',
+                                    isRegulatoryProcessNode: false,
+                                    isRegulatoryRuleBnglCaption: true,
+                                    regulatoryRuleOwnerId: node.id,
+                                    defaultWidth: regulatoryRuleBnglCaptionMetrics.width,
+                                    defaultHeight: regulatoryRuleBnglCaptionMetrics.height,
+                                    nodeOrder: nodeOrderCounter + 0.1,
+                                    specifiedPosition: undefined},
+                            position: {
+                                x: position.x,
+                                y: position.y + (displayHeight / 2) + 12 + (regulatoryRuleBnglCaptionMetrics.height / 2)
+                            },
+                            grabbable: false,
+                            selectable: false,
+                            classes: `${REGULATORY_RULE_BNGL_CAPTION_CLASS} ${REGULATORY_RULE_BNGL_HIDDEN_CLASS}`}
+                        );
+                    }
                     nodeKindsById[node.id] = nodeKind;
                     nodeOrderCounter += 1;
                 }
@@ -2873,6 +4119,21 @@
                         }
                     },
                     {
+                        selector: `.${REGULATORY_RULE_BNGL_CAPTION_CLASS}`,
+                        style: {
+                            'background-opacity': 0,
+                            'border-opacity': 0,
+                            'border-width': 0,
+                            'events': 'no'
+                        }
+                    },
+                    {
+                        selector: `.${REGULATORY_RULE_BNGL_HIDDEN_CLASS}`,
+                        style: {
+                            'display': 'none'
+                        }
+                    },
+                    {
                         selector: 'edge',
                         style: {
                             'width': 'data(lineWidth)',
@@ -2891,9 +4152,12 @@
                     && cytoElements["nodes"].some((node) => node.data.nodeKind === 'site');
                 graphHasInternalStates = graphKind === 'contactmap'
                     && cytoElements["nodes"].some((node) => node.data.nodeKind === 'state');
-                const defaultLayoutName = hasSpecifiedPositions
-                    ? 'preset'
-                    : ((graphKind === 'contactmap' || graphKind === 'regulatory') ? 'cose' : 'breadthfirst');
+                const preferStandaloneRulevizOperationLayout = isStandaloneRulevizOperationViewer();
+                const defaultLayoutName = preferStandaloneRulevizOperationLayout
+                    ? 'cose'
+                    : (hasSpecifiedPositions
+                        ? 'preset'
+                        : ((graphKind === 'contactmap' || graphKind === 'regulatory') ? 'cose' : 'breadthfirst'));
                 const layoutSelect = document.getElementById('layout_select');
                 const layoutLockButton = document.getElementById('layout_lock_button');
                 const fitButton = document.getElementById('fit_button');
@@ -2901,6 +4165,10 @@
                 const exportGraphmlButton = document.getElementById('graphml_button');
                 const toggleComponentsButton = document.getElementById('toggle_components_button');
                 const toggleInternalStatesButton = document.getElementById('toggle_internal_states_button');
+                const toggleRuleBnglButton = document.getElementById('toggle_rule_bngl_button');
+                const regulatoryRuleBnglAvailable = isStandaloneRegulatoryViewer()
+                    && cytoElements["nodes"].some((node) => node.data.isRegulatoryProcessNode && node.data.regulatoryRuleBnglText);
+                showRegulatoryRuleBngl = showRegulatoryRuleBngl && regulatoryRuleBnglAvailable;
 
                 const layoutFactories = {
                     preset: function () {
@@ -2919,9 +4187,11 @@
                             animate: false,
                             avoidOverlap: true,
                             nodeDimensionsIncludeLabels: true,
-                            spacingFactor: graphKind === 'regulatory'
+                            spacingFactor: preferStandaloneRulevizOperationLayout
+                                ? 1.4
+                                : (graphKind === 'regulatory'
                                 ? 1.45
-                                : (isStandaloneContactMapViewer() ? 1.4 : (graphKind === 'contactmap' ? 1.15 : 1.25))
+                                : (isStandaloneContactMapViewer() ? 1.4 : (graphKind === 'contactmap' ? 1.15 : 1.25)))
                         };
                     },
                     grid: function () {
@@ -2930,7 +4200,7 @@
                             fit: true,
                             padding: getGraphFitPadding(),
                             avoidOverlap: true,
-                            avoidOverlapPadding: isStandaloneContactMapViewer() ? 24 : 20,
+                            avoidOverlapPadding: preferStandaloneRulevizOperationLayout ? 32 : (isStandaloneContactMapViewer() ? 24 : 20),
                             nodeDimensionsIncludeLabels: true,
                             animate: false
                         };
@@ -2942,7 +4212,7 @@
                             padding: getGraphFitPadding(),
                             avoidOverlap: true,
                             nodeDimensionsIncludeLabels: true,
-                            spacingFactor: isStandaloneContactMapViewer() ? 1.25 : 1.15,
+                            spacingFactor: preferStandaloneRulevizOperationLayout ? 1.28 : (isStandaloneContactMapViewer() ? 1.25 : 1.15),
                             animate: false
                         };
                     },
@@ -2954,10 +4224,12 @@
                             avoidOverlap: true,
                             nodeDimensionsIncludeLabels: true,
                             animate: false,
-                            minNodeSpacing: graphKind === 'regulatory'
+                            minNodeSpacing: preferStandaloneRulevizOperationLayout
+                                ? 72
+                                : (graphKind === 'regulatory'
                                 ? 60
-                                : (isStandaloneContactMapViewer() ? 60 : 40),
-                            spacingFactor: isStandaloneContactMapViewer() ? 1.25 : 1.15
+                                : (isStandaloneContactMapViewer() ? 60 : 40)),
+                            spacingFactor: preferStandaloneRulevizOperationLayout ? 1.24 : (isStandaloneContactMapViewer() ? 1.25 : 1.15)
                         };
                     },
                     cose: function () {
@@ -2967,25 +4239,32 @@
                             padding: getGraphFitPadding(),
                             animate: false,
                             nodeDimensionsIncludeLabels: true,
-                            componentSpacing: graphKind === 'regulatory'
-                                ? 100
-                                : (isStandaloneContactMapViewer() ? 96 : (graphKind === 'contactmap' ? 28 : 80)),
-                            nodeOverlap: graphKind === 'contactmap' ? 10 : 32,
-                            idealEdgeLength: graphKind === 'regulatory'
+                            componentSpacing: preferStandaloneRulevizOperationLayout
                                 ? 180
-                                : (isStandaloneContactMapViewer() ? 96 : (graphKind === 'contactmap' ? 72 : 150)),
-                            edgeElasticity: isStandaloneContactMapViewer() ? 85 : (graphKind === 'contactmap' ? 90 : 120),
-                            nestingFactor: isStandaloneContactMapViewer() ? 0.95 : (graphKind === 'contactmap' ? 0.9 : 1.2),
-                            gravity: isStandaloneContactMapViewer() ? 0.95 : (graphKind === 'contactmap' ? 1.35 : 1),
-                            numIter: isStandaloneContactMapViewer() ? 1800 : (graphKind === 'contactmap' ? 1400 : 2500),
-                            initialTemp: isStandaloneContactMapViewer() ? 150 : (graphKind === 'contactmap' ? 120 : 200),
-                            coolingFactor: isStandaloneContactMapViewer() ? 0.96 : (graphKind === 'contactmap' ? 0.97 : 0.95),
+                                : (graphKind === 'regulatory'
+                                ? 100
+                                : (isStandaloneContactMapViewer() ? 96 : (graphKind === 'contactmap' ? 28 : 80))),
+                            nodeOverlap: preferStandaloneRulevizOperationLayout ? 18 : (graphKind === 'contactmap' ? 10 : 32),
+                            idealEdgeLength: preferStandaloneRulevizOperationLayout
+                                ? 110
+                                : (graphKind === 'regulatory'
+                                ? 180
+                                : (isStandaloneContactMapViewer() ? 96 : (graphKind === 'contactmap' ? 72 : 150))),
+                            edgeElasticity: preferStandaloneRulevizOperationLayout ? 100 : (isStandaloneContactMapViewer() ? 85 : (graphKind === 'contactmap' ? 90 : 120)),
+                            nestingFactor: preferStandaloneRulevizOperationLayout ? 1.05 : (isStandaloneContactMapViewer() ? 0.95 : (graphKind === 'contactmap' ? 0.9 : 1.2)),
+                            gravity: preferStandaloneRulevizOperationLayout ? 1 : (isStandaloneContactMapViewer() ? 0.95 : (graphKind === 'contactmap' ? 1.35 : 1)),
+                            numIter: preferStandaloneRulevizOperationLayout ? 2200 : (isStandaloneContactMapViewer() ? 1800 : (graphKind === 'contactmap' ? 1400 : 2500)),
+                            initialTemp: preferStandaloneRulevizOperationLayout ? 170 : (isStandaloneContactMapViewer() ? 150 : (graphKind === 'contactmap' ? 120 : 200)),
+                            coolingFactor: preferStandaloneRulevizOperationLayout ? 0.96 : (isStandaloneContactMapViewer() ? 0.96 : (graphKind === 'contactmap' ? 0.97 : 0.95)),
                             minTemp: 1
                         };
                     }
                 };
+                const requestedInitialLayoutName = preferStandaloneRulevizOperationLayout && currentGraphLayoutName === 'preset'
+                    ? undefined
+                    : currentGraphLayoutName;
                 const initialLayoutName = normalizeLayoutSelection(
-                    currentGraphLayoutName,
+                    requestedInitialLayoutName,
                     hasSpecifiedPositions,
                     defaultLayoutName,
                     layoutFactories
@@ -3007,6 +4286,16 @@
                     }
                 });
                 currentCy = cy;
+                if (isStandaloneRegulatoryViewer()) {
+                    cy.on('position', 'node', (event) => {
+                        const movedNode = event.target;
+                        if (!movedNode.data('isRegulatoryProcessNode')) {
+                            return;
+                        }
+
+                        syncRegulatoryRuleBnglCaptionForRuleNode(movedNode);
+                    });
+                }
                 applyGraphTheme();
 
                 if (!hasSpecifiedPositions && layoutSelect) {
@@ -3052,6 +4341,50 @@
                     return createLayout();
                 }
 
+                function getGraphElementsForLayout() {
+                    return cy.elements(':visible').not(`.${REGULATORY_RULE_BNGL_CAPTION_CLASS}`);
+                }
+
+                function syncRegulatoryRuleBnglCaptionForRuleNode(ruleNode) {
+                    if (!ruleNode || ruleNode.length === 0) {
+                        return;
+                    }
+
+                    const captionId = String(ruleNode.data('regulatoryRuleBnglCaptionId') || '');
+                    if (!captionId) {
+                        return;
+                    }
+
+                    const captionNode = cy.getElementById(captionId);
+                    if (!captionNode || captionNode.length === 0) {
+                        return;
+                    }
+
+                    const ruleHeight = Number(ruleNode.data('defaultHeight')) || Number(ruleNode.data('height')) || 48;
+                    const captionHeight = Number(captionNode.data('height')) || 28;
+                    const position = ruleNode.position();
+                    const captionGap = 12;
+
+                    captionNode.position({
+                        x: position.x,
+                        y: position.y + (ruleHeight / 2) + captionGap + (captionHeight / 2)
+                    });
+                }
+
+                function syncRegulatoryRuleBnglCaptionPositions() {
+                    if (!isStandaloneRegulatoryViewer()) {
+                        return;
+                    }
+
+                    cy.nodes().forEach((node) => {
+                        if (!node.data('isRegulatoryProcessNode')) {
+                            return;
+                        }
+
+                        syncRegulatoryRuleBnglCaptionForRuleNode(node);
+                    });
+                }
+
                 function applyLayout(layoutName, options = {}) {
                     const normalizedLayoutName = normalizeLayoutSelection(
                         layoutName,
@@ -3086,15 +4419,56 @@
                                 });
                             }
                         });
+                        syncRegulatoryRuleBnglCaptionPositions();
                         fitGraph({ animate: animateFit });
                         return;
                     }
 
-                    cy.elements(':visible').layout(createLayoutOptions(normalizedLayoutName)).run();
+                    const layout = getGraphElementsForLayout().layout(createLayoutOptions(normalizedLayoutName));
+                    layout.one('layoutstop', () => {
+                        if (currentCy !== cy) {
+                            return;
+                        }
+
+                        syncRegulatoryRuleBnglCaptionPositions();
+                        if (showRegulatoryRuleBngl && regulatoryRuleBnglAvailable) {
+                            fitGraph({ animate: animateFit });
+                        }
+                    });
+                    layout.run();
+                }
+
+                function applyRegulatoryRuleBnglMode(options = {}) {
+                    if (!isStandaloneRegulatoryViewer()) {
+                        updateRegulatoryRuleBnglButton(false);
+                        return;
+                    }
+
+                    const shouldShowRuleBngl = showRegulatoryRuleBngl && regulatoryRuleBnglAvailable;
+                    cy.batch(() => {
+                        cy.nodes(`.${REGULATORY_RULE_BNGL_CAPTION_CLASS}`).forEach((node) => {
+                            node.toggleClass(REGULATORY_RULE_BNGL_HIDDEN_CLASS, !shouldShowRuleBngl);
+                        });
+                    });
+
+                    syncRegulatoryRuleBnglCaptionPositions();
+                    cy.style().update();
+                    updateRegulatoryRuleBnglButton(regulatoryRuleBnglAvailable);
+
+                    if (options.fit === false) {
+                        return;
+                    }
+
+                    if (graphLayoutLocked || currentGraphLayoutName === 'preset') {
+                        fitGraph({ animate: options.animate !== false });
+                        return;
+                    }
+
+                    fitGraph({ animate: options.animate !== false });
                 }
 
                 function exportGraphPng() {
-                    const graphBackground = window.getComputedStyle(network).backgroundColor || '#ffffff';
+                    const graphBackground = getGraphExportBackgroundColor();
                     const uri = cy.png({
                         output: 'base64uri',
                         bg: graphBackground,
@@ -3111,12 +4485,125 @@
                     });
                 }
 
+                function getGraphExportBackgroundColor() {
+                    if (isStandaloneContactMapViewer()) {
+                        return getContactMapViewerPalette().background;
+                    }
+
+                    if (isStandaloneRegulatoryViewer()) {
+                        return getRegulatoryViewerPalette().background;
+                    }
+
+                    const fallbackBackground = cssVar('--viewer-background', '#ffffff');
+                    const backgroundColor = window.getComputedStyle(network).backgroundColor;
+                    const parsedBackground = parseColor(backgroundColor);
+
+                    if (!parsedBackground || parsedBackground.a === 0) {
+                        return fallbackBackground;
+                    }
+
+                    return toCssColor(parsedBackground);
+                }
+
+                function getNodeGeometryForGraphmlExport(node) {
+                    const storedWidth = node.isParent()
+                        ? (
+                            Number(node.data('layoutFootprintWidth'))
+                            || Number(node.data('minCompoundWidth'))
+                            || Number(node.data('width'))
+                        )
+                        : Number(node.data('width'));
+                    const storedHeight = node.isParent()
+                        ? (
+                            Number(node.data('layoutFootprintHeight'))
+                            || Number(node.data('minCompoundHeight'))
+                            || Number(node.data('height'))
+                        )
+                        : Number(node.data('height'));
+                    const width = storedWidth > 0
+                        ? storedWidth
+                        : getNodeLayoutSize(node).width;
+                    const height = storedHeight > 0
+                        ? storedHeight
+                        : getNodeLayoutSize(node).height;
+                    const position = node.position();
+
+                    return {
+                        x: position.x - (width / 2),
+                        y: position.y - (height / 2),
+                        width: width,
+                        height: height
+                    };
+                }
+
+                function findGraphmlGeometryContainer(graphNode) {
+                    const searchRoots = Array.from(graphNode.children || []).filter((child) => child.tagName === 'data');
+                    const roots = searchRoots.length !== 0 ? searchRoots : [graphNode];
+
+                    for (const root of roots) {
+                        const descendants = Array.from(root.getElementsByTagName('*'));
+                        const preferredContainer = descendants.find((element) => {
+                            return element.tagName === 'y:ShapeNode'
+                                || element.tagName === 'y:GenericNode'
+                                || element.tagName === 'y:GroupNode';
+                        });
+
+                        if (preferredContainer) {
+                            return preferredContainer;
+                        }
+
+                        const fallbackContainer = descendants.find((element) => element.tagName.startsWith('y:'));
+                        if (fallbackContainer) {
+                            return fallbackContainer;
+                        }
+                    }
+
+                    return null;
+                }
+
+                function serializeGraphmlWithCurrentLayout() {
+                    const exportDoc = xmlDoc.cloneNode(true);
+                    const serializer = new XMLSerializer();
+                    const yNamespace = exportDoc.lookupNamespaceURI('y') || 'http://www.yworks.com/xml/graphml';
+
+                    Array.from(exportDoc.getElementsByTagName('node')).forEach((graphNode) => {
+                        const nodeId = graphNode.getAttribute('id');
+                        if (!nodeId) {
+                            return;
+                        }
+
+                        const cyNode = cy.getElementById(nodeId);
+                        if (!cyNode || cyNode.length === 0) {
+                            return;
+                        }
+
+                        const geometry = getNodeGeometryForGraphmlExport(cyNode);
+                        const geometryContainer = findGraphmlGeometryContainer(graphNode);
+                        if (!geometryContainer) {
+                            return;
+                        }
+
+                        let geometryElement = geometryContainer.getElementsByTagName('y:Geometry').item(0);
+                        if (!geometryElement) {
+                            geometryElement = exportDoc.createElementNS(yNamespace, 'y:Geometry');
+                            geometryContainer.insertBefore(geometryElement, geometryContainer.firstChild);
+                        }
+
+                        geometryElement.setAttribute('x', geometry.x.toFixed(2));
+                        geometryElement.setAttribute('y', geometry.y.toFixed(2));
+                        geometryElement.setAttribute('width', geometry.width.toFixed(2));
+                        geometryElement.setAttribute('height', geometry.height.toFixed(2));
+                    });
+
+                    return serializer.serializeToString(exportDoc);
+                }
+
                 function exportGraphml() {
                     vscode.postMessage({
-                        command: 'graphml-copy',
-                        title: page_title + '_copy',
+                        command: 'graphml-export',
+                        title: page_title + '_layout',
                         folder: page_folder,
-                        text: graphmlText
+                        text: serializeGraphmlWithCurrentLayout()
                     });
                 }
 
@@ -3168,13 +4655,23 @@
                     };
                 }
 
+                if (toggleRuleBnglButton) {
+                    toggleRuleBnglButton.onclick = function () {
+                        showRegulatoryRuleBngl = !showRegulatoryRuleBngl;
+                        applyRegulatoryRuleBnglMode({ fit: false });
+                        persistGraphViewState();
+                    };
+                }
+
                 updateComponentsButton();
                 updateInternalStatesButton();
+                updateRegulatoryRuleBnglButton(regulatoryRuleBnglAvailable);
 
                 if (isStandaloneContactMapViewer()) {
                     ensureStandaloneContactMapPrepared(cy);
                 }
 
+                applyRegulatoryRuleBnglMode({ fit: false });
                 applyContactMapStructureVisibility();
 
                 if (isStandaloneContactMapViewer()) {

@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { parseDat } from '../parseDat';
-import { getGraphmlVisualizationKind, shouldUseStandaloneContactMapPalette } from '../resultsFolders';
+import { parseBnglDocument } from '../server/parser';
+import { getGraphmlVisualizationKind, getStandaloneGraphPaletteKind } from '../resultsFolders';
 
 function getNonce(): string {
     let text = '';
@@ -16,9 +17,36 @@ function escapeHtml(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function getCanonicalRulevizOperationBrowserBaseName(filePath: string): string | undefined {
+    const extension = path.extname(filePath).toLowerCase();
+    if (extension !== '.graphml') {
+        return undefined;
+    }
+
+    const graphBaseName = path.basename(filePath, path.extname(filePath));
+    const match = graphBaseName.match(/^(.*_ruleviz_operation)_.+$/i);
+    return match?.[1];
+}
+
+function getCanonicalGraphmlBaseName(filePath: string): string {
+    return getCanonicalRulevizOperationBrowserBaseName(filePath)
+        ?? path.basename(filePath, path.extname(filePath));
+}
+
+function getPlotPanelKey(filePath: string): string {
+    const canonicalRulevizBaseName = getCanonicalRulevizOperationBrowserBaseName(filePath);
+    if (!canonicalRulevizBaseName) {
+        return filePath;
+    }
+
+    return path.join(path.dirname(filePath), `${canonicalRulevizBaseName}.graphml`);
+}
+
 function getPanelTitle(fpath: string): string {
     const extension = path.extname(fpath).substring(1);
-    const fname = path.basename(fpath, path.extname(fpath));
+    const fname = extension === 'graphml'
+        ? getCanonicalGraphmlBaseName(fpath)
+        : path.basename(fpath, path.extname(fpath));
 
     if (extension === 'graphml') {
         return fname;
@@ -36,6 +64,221 @@ function getExportBaseName(fname: string, ext: string): string {
     return ext === 'graphml' ? fname : `${fname}_${ext}`;
 }
 
+function getPreferredModelBaseName(graphmlPath: string): string {
+    const graphBaseName = getCanonicalGraphmlBaseName(graphmlPath);
+    return graphBaseName
+        .replace(/_contactmap$/i, '')
+        .replace(/_regulatory$/i, '')
+        .replace(/_ruleviz_operation$/i, '')
+        .replace(/_ruleviz_pattern$/i, '')
+        .replace(/_ruleviz$/i, '');
+}
+
+function getPreferredSiblingBnglName(graphmlPath: string, siblingNames: readonly string[]): string | undefined {
+    const bnglNames = siblingNames.filter((name) => path.extname(name).toLowerCase() === '.bngl');
+    if (bnglNames.length === 0) {
+        return undefined;
+    }
+
+    const preferredModelBaseName = getPreferredModelBaseName(graphmlPath);
+    const preferredName = bnglNames.find((name) => path.basename(name, path.extname(name)) === preferredModelBaseName);
+    return preferredName ?? bnglNames[0];
+}
+
+function getRuleDisplayLabel(rawLabel: string, index: number): string {
+    const trimmedLabel = rawLabel.trim();
+    return trimmedLabel || `_R${index + 1}`;
+}
+
+function getRegulatoryReverseRuleDisplayLabels(displayLabel: string): string[] {
+    const variants = new Set<string>();
+    const trimmedLabel = displayLabel.trim();
+    if (!trimmedLabel) {
+        return [];
+    }
+
+    variants.add(`_reverse_${trimmedLabel}`);
+    variants.add(`reverse_${trimmedLabel}`);
+
+    if (trimmedLabel.startsWith('_')) {
+        const withoutLeadingUnderscore = trimmedLabel.slice(1);
+        if (withoutLeadingUnderscore) {
+            variants.add(`_reverse_${withoutLeadingUnderscore}`);
+            variants.add(`reverse_${withoutLeadingUnderscore}`);
+        }
+    }
+
+    return Array.from(variants);
+}
+
+function getRulevizOperationReverseRuleDisplayLabel(displayLabel: string): string {
+    return `_reverse_${displayLabel.trim()}`;
+}
+
+function getRulevizOperationSplitSuffix(fileName: string): string | undefined {
+    if (path.extname(fileName).toLowerCase() !== '.graphml') {
+        return undefined;
+    }
+
+    const baseName = path.basename(fileName, path.extname(fileName));
+    const match = baseName.match(/^(.*_ruleviz_operation)_(.+)$/i);
+    return match?.[2];
+}
+
+function isRulevizOperationSplitGraphmlFileName(fileName: string): boolean {
+    return getGraphmlVisualizationKind(fileName) === 'ruleviz_operation'
+        && typeof getRulevizOperationSplitSuffix(fileName) === 'string';
+}
+
+interface RulevizOperationBrowserRow {
+    fileName: string;
+    graphmlText: string;
+    displayLabel: string;
+    bnglText?: string;
+}
+
+async function getRegulatoryRuleBnglByLabel(
+    graphmlPath: string,
+    folderUri: vscode.Uri,
+    siblingNames: readonly string[]
+): Promise<Record<string, string> | undefined> {
+    const bnglName = getPreferredSiblingBnglName(graphmlPath, siblingNames);
+    if (!bnglName) {
+        return undefined;
+    }
+
+    const bnglUri = vscode.Uri.joinPath(folderUri, bnglName);
+    const rawBytes = await vscode.workspace.fs.readFile(bnglUri);
+    const text = Buffer.from(rawBytes).toString('utf8');
+    const doc = parseBnglDocument(text);
+
+    if (doc.rules.length === 0) {
+        return undefined;
+    }
+
+    const byLabel: Record<string, string> = {};
+    doc.rules.forEach((rule, index) => {
+        const displayLabel = getRuleDisplayLabel(rule.label, index);
+        const sourceText = rule.sourceText.trim();
+        if (!sourceText) {
+            return;
+        }
+
+        byLabel[displayLabel] = sourceText;
+        if (/^_R\d+$/i.test(displayLabel)) {
+            byLabel[displayLabel.slice(1)] = sourceText;
+        }
+        if (sourceText.includes('<->')) {
+            for (const reverseLabel of getRegulatoryReverseRuleDisplayLabels(displayLabel)) {
+                byLabel[reverseLabel] = sourceText;
+            }
+        }
+    });
+
+    return Object.keys(byLabel).length === 0 ? undefined : byLabel;
+}
+
+async function getRulevizOperationBrowserRows(
+    graphmlPath: string,
+    folderUri: vscode.Uri,
+    siblingNames: readonly string[]
+): Promise<RulevizOperationBrowserRow[] | undefined> {
+    const splitGraphmlNames = siblingNames
+        .filter(isRulevizOperationSplitGraphmlFileName)
+        .sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }));
+
+    if (splitGraphmlNames.length === 0) {
+        return undefined;
+    }
+
+    const graphmlNameBySuffix = new Map<string, string>();
+    splitGraphmlNames.forEach((name) => {
+        const suffix = getRulevizOperationSplitSuffix(name);
+        if (suffix) {
+            graphmlNameBySuffix.set(suffix, name);
+        }
+    });
+
+    const orderedRows: Array<Omit<RulevizOperationBrowserRow, 'graphmlText'>> = [];
+    const consumedFileNames = new Set<string>();
+    const bnglName = getPreferredSiblingBnglName(graphmlPath, siblingNames);
+
+    if (bnglName) {
+        try {
+            const bnglUri = vscode.Uri.joinPath(folderUri, bnglName);
+            const rawBytes = await vscode.workspace.fs.readFile(bnglUri);
+            const text = Buffer.from(rawBytes).toString('utf8');
+            const doc = parseBnglDocument(text);
+
+            doc.rules.forEach((rule, index) => {
+                const displayLabel = getRuleDisplayLabel(rule.label, index);
+                const sourceText = rule.sourceText.trim();
+                const forwardFileName = graphmlNameBySuffix.get(displayLabel);
+
+                if (forwardFileName) {
+                    orderedRows.push({
+                        fileName: forwardFileName,
+                        displayLabel: displayLabel,
+                        bnglText: sourceText || undefined
+                    });
+                    consumedFileNames.add(forwardFileName);
+                }
+
+                if (!sourceText.includes('<->')) {
+                    return;
+                }
+
+                const reverseDisplayLabel = getRulevizOperationReverseRuleDisplayLabel(displayLabel);
+                const reverseFileName = graphmlNameBySuffix.get(reverseDisplayLabel);
+                if (!reverseFileName) {
+                    return;
+                }
+
+                orderedRows.push({
+                    fileName: reverseFileName,
+                    displayLabel: reverseDisplayLabel,
+                    bnglText: sourceText || undefined
+                });
+                consumedFileNames.add(reverseFileName);
+            });
+        } catch {
+            // Fall back to filename-only metadata below.
+        }
+    }
+
+    splitGraphmlNames.forEach((name) => {
+        if (consumedFileNames.has(name)) {
+            return;
+        }
+
+        const suffix = getRulevizOperationSplitSuffix(name);
+        if (!suffix) {
+            return;
+        }
+
+        orderedRows.push({
+            fileName: name,
+            displayLabel: suffix
+        });
+    });
+
+    if (orderedRows.length === 0) {
+        return undefined;
+    }
+
+    const rows: RulevizOperationBrowserRow[] = [];
+    for (const row of orderedRows) {
+        const graphmlUri = vscode.Uri.joinPath(folderUri, row.fileName);
+        const rawBytes = await vscode.workspace.fs.readFile(graphmlUri);
+        rows.push({
+            ...row,
+            graphmlText: Buffer.from(rawBytes).toString('utf8')
+        });
+    }
+
+    return rows;
+}
+
 export class PlotPanel {
     public static currentPanels = new Map<string, PlotPanel>();
     public static readonly viewType = 'plot';
@@ -47,15 +290,20 @@ export class PlotPanel {
     public static disposeForFolder(folderPath: string) {
         const normalizedFolderPath = path.resolve(folderPath);
 
-        for (const [filePath, panel] of Array.from(PlotPanel.currentPanels.entries())) {
-            const panelFolderPath = path.resolve(path.dirname(filePath));
+        for (const panel of Array.from(PlotPanel.currentPanels.values())) {
+            const panelFolderPath = path.resolve(path.dirname(panel._fpath));
             if (panelFolderPath === normalizedFolderPath || panelFolderPath.startsWith(`${normalizedFolderPath}${path.sep}`)) {
                 panel.dispose();
             }
         }
     }
 
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, private _fpath: string) {
+    private constructor(
+        panel: vscode.WebviewPanel,
+        extensionUri: vscode.Uri,
+        private _fpath: string,
+        private _panelKey: string
+    ) {
         this._panel = panel;
         this._extensionUri = extensionUri;
 
@@ -73,8 +321,8 @@ export class PlotPanel {
                 case 'image':
                     this._save_image(message);
                     return;
-                case 'graphml-copy':
-                    this._save_graphml_copy(message);
+                case 'graphml-export':
+                    this._save_graphml_export(message);
                     return;
             }
         }, null, this._disposables);
@@ -88,11 +336,12 @@ export class PlotPanel {
                 ? target.fsPath
                 : editor?.document.fileName;
         if (!fpath) return;
+        const panelKey = getPlotPanelKey(fpath);
 
         const column = targetColumn ?? editor?.viewColumn;
 
-        if (PlotPanel.currentPanels.has(fpath)) {
-            PlotPanel.currentPanels.get(fpath)?._panel.reveal(column);
+        if (PlotPanel.currentPanels.has(panelKey)) {
+            PlotPanel.currentPanels.get(panelKey)?._panel.reveal(column);
             return;
         }
 
@@ -109,14 +358,16 @@ export class PlotPanel {
             }
         );
 
-        PlotPanel.currentPanels.set(fpath, new PlotPanel(panel, extensionUri, fpath));
+        PlotPanel.currentPanels.set(panelKey, new PlotPanel(panel, extensionUri, fpath, panelKey));
     }
 
     private _setup() {
         const webview = this._panel.webview;
         const nonce = getNonce();
         const extension = path.extname(this._fpath).substring(1);
-        const fname = path.basename(this._fpath, path.extname(this._fpath));
+        const fname = extension === 'graphml'
+            ? getCanonicalGraphmlBaseName(this._fpath)
+            : path.basename(this._fpath, path.extname(this._fpath));
         const exportBaseName = getExportBaseName(fname, extension);
 
         const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'main.js'));
@@ -152,16 +403,18 @@ export class PlotPanel {
                       <button id="layout_lock_button" class="secondary" type="button">Lock Layout</button>
                       <button id="fit_button" class="secondary" type="button">Scale to Fit</button>
                       <button id="view_mode_button" class="secondary" type="button">Night View</button>
+                      <button id="toggle_rule_bngl_button" class="secondary" type="button" hidden>Show Rule BNGL</button>
                       <button id="toggle_components_button" class="secondary" type="button" hidden>Hide Components</button>
                       <button id="toggle_internal_states_button" class="secondary" type="button" hidden>Hide Internal States</button>
                     </div>
                     <div class="graph-toolbar-group">
-                      <button id="png_button" type="button">Export PNG</button>
-                      <button id="graphml_button" class="secondary" type="button">Export GraphML</button>
+                      <button id="png_button" type="button" title="Save the current graph view as a PNG image">Save PNG</button>
+                      <button id="graphml_button" class="secondary" type="button" title="Save a GraphML copy with the current node layout">Save GraphML</button>
                     </div>
                   </div>
                   <div id="network_wrapper">
                     <div id="network"></div>
+                    <div id="ruleviz_browser" hidden></div>
                   </div>
                 </div>
                 <script nonce="${nonce}" src="${jqUri}"></script>
@@ -212,8 +465,8 @@ export class PlotPanel {
                     </div>
                     <div class="sidebar-footer">
                         <button id="view_mode_button" class="secondary">Night View</button>
-                        <button id="export-png">Export PNG</button>
-                        <button id="export-svg" class="secondary">Export SVG</button>
+                        <button id="export-png" title="Save the current plot as a PNG image">Save PNG</button>
+                        <button id="export-svg" class="secondary" title="Save the current plot as an SVG image">Save SVG</button>
                     </div>
                 </div>
                 <div id="plot-container">
@@ -251,16 +504,38 @@ export class PlotPanel {
         if (ext === 'graphml') {
             const folderUri = vscode.Uri.file(path.dirname(this._fpath));
             const graphKind = getGraphmlVisualizationKind(this._fpath);
-            let useContactMapViewerPalette = false;
+            let standaloneGraphPaletteKind: string | null = null;
+            let regulatoryRuleBnglByLabel: Record<string, string> | undefined;
+            let rulevizOperationBrowserRows: RulevizOperationBrowserRow[] | undefined;
 
             try {
                 const entries = await vscode.workspace.fs.readDirectory(folderUri);
-                useContactMapViewerPalette = shouldUseStandaloneContactMapPalette(
+                const siblingNames = entries.map(([name]) => name);
+                standaloneGraphPaletteKind = getStandaloneGraphPaletteKind(
                     this._fpath,
-                    entries.map(([name]) => name)
+                    siblingNames
                 );
+                if (graphKind === 'regulatory') {
+                    regulatoryRuleBnglByLabel = await getRegulatoryRuleBnglByLabel(this._fpath, folderUri, siblingNames);
+                }
+                if (graphKind === 'ruleviz_operation' && standaloneGraphPaletteKind === 'ruleviz_operation') {
+                    rulevizOperationBrowserRows = await getRulevizOperationBrowserRows(this._fpath, folderUri, siblingNames);
+                }
             } catch {
-                useContactMapViewerPalette = false;
+                standaloneGraphPaletteKind = null;
+                regulatoryRuleBnglByLabel = undefined;
+                rulevizOperationBrowserRows = undefined;
+            }
+
+            if (graphKind === 'ruleviz_operation' && standaloneGraphPaletteKind === 'ruleviz_operation' && rulevizOperationBrowserRows) {
+                this._panel.webview.postMessage({
+                    command: 'ruleviz-browser',
+                    context: 'data',
+                    graphKind,
+                    standaloneGraphPaletteKind,
+                    rows: rulevizOperationBrowserRows
+                });
+                return;
             }
 
             this._panel.webview.postMessage({
@@ -268,7 +543,8 @@ export class PlotPanel {
                 context: 'data',
                 data: text,
                 graphKind,
-                useContactMapViewerPalette
+                standaloneGraphPaletteKind,
+                regulatoryRuleBnglByLabel
             });
         } else {
             const data = parseDat(text);
@@ -312,7 +588,7 @@ export class PlotPanel {
         });
     }
 
-    private _save_graphml_copy(message: any) {
+    private _save_graphml_export(message: any) {
         const folder = vscode.Uri.file(message.folder);
         const uri = vscode.Uri.joinPath(folder, `${message.title}.graphml`);
         const data = Buffer.from(message.text, 'utf8');
@@ -325,7 +601,7 @@ export class PlotPanel {
     }
 
     public dispose() {
-        PlotPanel.currentPanels.delete(this._fpath);
+        PlotPanel.currentPanels.delete(this._panelKey);
         this._panel.dispose();
         while (this._disposables.length) {
             const x = this._disposables.pop();

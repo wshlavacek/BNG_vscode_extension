@@ -55,9 +55,10 @@ to display, toggling axis scales, changing line styles, and exporting images.
 Visualization
 =============
 
-Click the BioNetGen icon and select ``Contact Map`` to generate only the contact-map GraphML, or
-``All Graphs`` to generate the full set of visualizations (contact maps, rule visualizations,
-regulatory graphs). These files are designed to be used with
+Click the BioNetGen icon and select ``Contact Map`` or ``Regulatory Graph`` to generate only that
+GraphML output, or ``All Graphs`` to generate the full set of visualizations (contact maps, rule
+visualizations, regulatory graphs). These files are designed to be used with
 `yEd <https://www.yworks.com/products/yed>`_.
 In the built-in viewer, contact maps also support direct layout selection, layout locking,
-scale-to-fit, and show/hide toggles for components and internal states.
+scale-to-fit, save actions for PNG and GraphML-with-current-layout, and show/hide toggles for
+components and internal states.

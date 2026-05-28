@@ -18,13 +18,13 @@ A [VS Code](https://code.visualstudio.com/) extension for the [BioNetGen](http:/
 
 1. Open or create a `.bngl` file. Syntax highlighting and language server features activate automatically.
 2. Click the **BioNetGen icon** in the editor title bar to open the command menu. Depending on the active file, the dropdown can show:
-   - **Simulate**, **Contact Map**, **All Graphs**, and **Results Folder...** for `.bngl` files
+   - **Simulate**, **Contact Map**, **Regulatory Graph**, **All Graphs**, and **Results Folder...** for `.bngl` files
    - **Plot** for `.gdat` / `.cdat` / `.scan` files
    - **View** for `.graphml` files
    - **Install** and **Upgrade** for PyBioNetGen management
 3. After a simulation completes, the resulting `.gdat` file opens automatically. Click the BioNetGen icon to launch the interactive plot viewer.
-4. Use **Contact Map** to generate only the contact-map GraphML, or **All Graphs** when you also want rule-visualization and regulatory outputs.
-5. Generated GraphML files can be opened in the built-in viewer, where you can switch layouts directly, lock or unlock the layout, use **Scale to Fit**, toggle day/night mode, and export the graph as PNG or GraphML from the toolbar. Contact maps also include show/hide toggles for components and internal states.
+4. Use **Contact Map** or **Regulatory Graph** to generate just that GraphML output, or **All Graphs** when you also want the full contact-map, rule-visualization, and regulatory set.
+5. Generated GraphML files can be opened in the built-in viewer, where you can switch layouts directly, lock or unlock the layout, use **Scale to Fit**, toggle day/night mode, save the graph as PNG, and save a GraphML copy with the current node layout from the toolbar. Contact maps also include show/hide toggles for components and internal states.
 6. Use the **sidebar controls** in the plot viewer to toggle variables on/off, switch axis scales (linear/log), change line styles, toggle the legend, and export images.
 
 ## Requirements

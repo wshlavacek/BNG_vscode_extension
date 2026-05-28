@@ -55,6 +55,7 @@ export interface BnglRule {
     reactants: string;
     products: string;
     rate: string;
+    sourceText: string;
     line: number;
 }
 
@@ -516,7 +517,8 @@ const RULE_KEYWORDS = new Set([
 ]);
 
 function parseRuleLine(trimmed: string, line: number, doc: BnglDocument): void {
-    let content = stripComment(trimmed).trim();
+    const sourceText = stripComment(trimmed).trim();
+    let content = sourceText;
     if (!content) return;
 
     // Strip optional rule label (e.g. "_R3:" or "rule1:")
@@ -551,9 +553,9 @@ function parseRuleLine(trimmed: string, line: number, doc: BnglDocument): void {
         if (parts.length >= 2) {
             const rate = parts[parts.length - 1];
             const products = parts.slice(0, -1).join(' ');
-            doc.rules.push({ label, reactants: arrowMatch[1].trim(), products, rate, line });
+            doc.rules.push({ label, reactants: arrowMatch[1].trim(), products, rate, sourceText, line });
         } else {
-            doc.rules.push({ label, reactants: arrowMatch[1].trim(), products: after, rate: '', line });
+            doc.rules.push({ label, reactants: arrowMatch[1].trim(), products: after, rate: '', sourceText, line });
         }
     }
 }

@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
+    getStandaloneGraphPaletteKind,
     getGraphmlVisualizationKind,
     getResultsBaseFolderUri,
     getResultsRootFolderName,
@@ -11,6 +12,8 @@ import {
     isGeneratedResultsRunFolderName,
     resolveResultsBaseFolderPath,
     shouldUseStandaloneContactMapPalette,
+    shouldUseStandaloneRegulatoryPalette,
+    shouldUseStandaloneRulevizOperationLayout,
 } from '../../resultsFolders';
 
 suite('Results Folders', () => {
@@ -37,11 +40,51 @@ suite('Results Folders', () => {
         );
     });
 
+    test('detects standalone regulatory graphs only when no other graphml outputs are present', () => {
+        const filePath = path.join('/tmp', 'results_nfkb', '2026_05_18__12_34_56', 'nfkb_regulatory.graphml');
+        assert.strictEqual(
+            shouldUseStandaloneRegulatoryPalette(filePath, ['nfkb.bngl', 'nfkb_regulatory.graphml']),
+            true
+        );
+        assert.strictEqual(
+            shouldUseStandaloneRegulatoryPalette(filePath, ['nfkb.bngl', 'nfkb_contactmap.graphml', 'nfkb_regulatory.graphml']),
+            false
+        );
+    });
+
+    test('returns the standalone palette kind for supported single-graph outputs', () => {
+        assert.strictEqual(
+            getStandaloneGraphPaletteKind('/tmp/nfkb_contactmap.graphml', ['nfkb_contactmap.graphml']),
+            'contactmap'
+        );
+        assert.strictEqual(
+            getStandaloneGraphPaletteKind('/tmp/nfkb_regulatory.graphml', ['nfkb_regulatory.graphml']),
+            'regulatory'
+        );
+        assert.strictEqual(
+            getStandaloneGraphPaletteKind('/tmp/nfkb_ruleviz_operation.graphml', ['nfkb_ruleviz_operation.graphml']),
+            'ruleviz_operation'
+        );
+    });
+
     test('classifies graphml visualization kinds from filenames', () => {
         assert.strictEqual(getGraphmlVisualizationKind('/tmp/nfkb_contactmap.graphml'), 'contactmap');
         assert.strictEqual(getGraphmlVisualizationKind('/tmp/nfkb_regulatory.graphml'), 'regulatory');
-        assert.strictEqual(getGraphmlVisualizationKind('/tmp/nfkb_ruleviz_operation.graphml'), 'ruleviz');
+        assert.strictEqual(getGraphmlVisualizationKind('/tmp/nfkb_ruleviz_operation.graphml'), 'ruleviz_operation');
+        assert.strictEqual(getGraphmlVisualizationKind('/tmp/nfkb_ruleviz_pattern.graphml'), 'ruleviz_pattern');
         assert.strictEqual(getGraphmlVisualizationKind('/tmp/nfkb_notes.txt'), 'other');
+    });
+
+    test('detects standalone RuleViz (Operation) only when no other graphml outputs are present', () => {
+        const filePath = path.join('/tmp', 'results_nfkb', '2026_05_18__12_34_56', 'nfkb_ruleviz_operation.graphml');
+        assert.strictEqual(
+            shouldUseStandaloneRulevizOperationLayout(filePath, ['nfkb.bngl', 'nfkb_ruleviz_operation.graphml']),
+            true
+        );
+        assert.strictEqual(
+            shouldUseStandaloneRulevizOperationLayout(filePath, ['nfkb.bngl', 'nfkb_ruleviz_operation.graphml', 'nfkb_contactmap.graphml']),
+            false
+        );
     });
 
     test('uses the model folder when no custom results base is configured', () => {

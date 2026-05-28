@@ -3,7 +3,8 @@ import * as vscode from 'vscode';
 
 const GENERATED_RESULTS_RUN_PATTERN = /^\d{4}_\d{2}_\d{2}__\d{2}_\d{2}_\d{2}$/;
 
-export type GraphmlVisualizationKind = 'contactmap' | 'regulatory' | 'ruleviz' | 'other';
+export type GraphmlVisualizationKind = 'contactmap' | 'regulatory' | 'ruleviz_pattern' | 'ruleviz_operation' | 'ruleviz' | 'other';
+export type StandaloneGraphPaletteKind = Extract<GraphmlVisualizationKind, 'contactmap' | 'regulatory' | 'ruleviz_operation'>;
 
 function isGraphmlFileName(name: string): boolean {
     return path.extname(name).toLowerCase() === '.graphml';
@@ -82,6 +83,14 @@ export function getGraphmlVisualizationKind(filePath: string): GraphmlVisualizat
         return 'regulatory';
     }
 
+    if (baseName.includes('ruleviz_operation')) {
+        return 'ruleviz_operation';
+    }
+
+    if (baseName.includes('ruleviz_pattern')) {
+        return 'ruleviz_pattern';
+    }
+
     if (baseName.includes('ruleviz')) {
         return 'ruleviz';
     }
@@ -93,18 +102,38 @@ export function isContactMapGraphmlFileName(name: string): boolean {
     return getGraphmlVisualizationKind(name) === 'contactmap';
 }
 
-export function shouldUseStandaloneContactMapPalette(filePath: string, siblingNames: readonly string[]): boolean {
-    const currentFileName = path.basename(filePath);
+export function isRegulatoryGraphmlFileName(name: string): boolean {
+    return getGraphmlVisualizationKind(name) === 'regulatory';
+}
 
-    if (!isContactMapGraphmlFileName(currentFileName)) {
-        return false;
+export function getStandaloneGraphPaletteKind(filePath: string, siblingNames: readonly string[]): StandaloneGraphPaletteKind | null {
+    const currentFileName = path.basename(filePath);
+    const currentKind = getGraphmlVisualizationKind(currentFileName);
+
+    if (currentKind !== 'contactmap' && currentKind !== 'regulatory' && currentKind !== 'ruleviz_operation') {
+        return null;
     }
 
-    return !siblingNames.some((name) => {
+    const hasConflictingGraphmlSibling = siblingNames.some((name) => {
         if (name === currentFileName) {
             return false;
         }
 
-        return isGraphmlFileName(name) && !isContactMapGraphmlFileName(name);
+        const siblingKind = getGraphmlVisualizationKind(name);
+        return siblingKind !== 'other' && siblingKind !== currentKind;
     });
+
+    return hasConflictingGraphmlSibling ? null : currentKind;
+}
+
+export function shouldUseStandaloneContactMapPalette(filePath: string, siblingNames: readonly string[]): boolean {
+    return getStandaloneGraphPaletteKind(filePath, siblingNames) === 'contactmap';
+}
+
+export function shouldUseStandaloneRegulatoryPalette(filePath: string, siblingNames: readonly string[]): boolean {
+    return getStandaloneGraphPaletteKind(filePath, siblingNames) === 'regulatory';
+}
+
+export function shouldUseStandaloneRulevizOperationLayout(filePath: string, siblingNames: readonly string[]): boolean {
+    return getStandaloneGraphPaletteKind(filePath, siblingNames) === 'ruleviz_operation';
 }

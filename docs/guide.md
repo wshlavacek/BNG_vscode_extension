@@ -26,7 +26,7 @@ Once you have some ```gdat/cdat/scan``` files to look at, you can open one and c
 
 ### Visualization
 
-Click the BioNetGen icon and select **Contact Map** to generate only the contact-map GraphML, or **All Graphs** to generate the full set of visualizations (contact maps, rule visualizations, regulatory graphs). Open a generated `.graphml` file and choose **Open Plot / Viewer** to inspect it in the built-in GraphML viewer.
+Click the BioNetGen icon and select **Contact Map** or **Regulatory Graph** to generate only that GraphML output, or **All Graphs** to generate the full set of visualizations (contact maps, rule visualizations, regulatory graphs). Open a generated `.graphml` file and choose **Open Plot / Viewer** to inspect it in the built-in GraphML viewer.
 
 The GraphML viewer toolbar lets you:
 
@@ -35,7 +35,7 @@ The GraphML viewer toolbar lets you:
 - scale the graph to fit the viewport
 - toggle between day and night viewer themes
 - show or hide components and internal states in contact maps
-- export the graph as PNG
-- export GraphML directly from the viewer
+- save the graph as PNG
+- save a GraphML copy with the current node layout directly from the viewer
 
 The generated GraphML files also remain compatible with [yEd](https://www.yworks.com/products/yed) if you prefer to continue working with them there.

@@ -282,6 +282,7 @@ suite('BNGL Parser', () => {
             assert.strictEqual(doc.rules.length, 1);
             assert.strictEqual(doc.rules[0].reactants, '0');
             assert.strictEqual(doc.rules[0].rate, 'k_syn');
+            assert.strictEqual(doc.rules[0].sourceText, '_R1: 0 -> A() k_syn');
         });
 
         test('strips trailing keywords like DeleteMolecules', () => {

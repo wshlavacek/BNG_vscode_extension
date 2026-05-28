@@ -6,6 +6,14 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+### Changed
+- Added a dedicated `Regulatory Graph` command alongside `Contact Map` and `All Graphs` for generating only the regulatory GraphML output
+- Standalone regulatory-graph views now use their own custom day/night palette instead of reusing the contact-map colors
+- Regulatory graph process nodes now recover compact rule labels from the sibling BNGL model when BioNetGen emits blank oval labels
+- Standalone Contact Map exports in light mode now render against a white canvas so the tan molecule boxes separate more clearly
+- GraphML saves from the built-in viewer now preserve the current node layout, and the toolbar buttons use clearer `Save ...` wording to match their behavior
+- Graph-view toolbar buttons now use a unified palette in each viewer mode, with light blue buttons in Day View and tan buttons in Night View
+
 ## [0.8.2] - 2026-05-19
 
 ### Changed
