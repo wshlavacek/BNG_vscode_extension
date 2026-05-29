@@ -126,6 +126,9 @@
             operationFill: '#ccb9e2',
             operationBorder: '#6f5b8e',
             operationLabel: '#312043',
+            modifierFill: '#b59cd7',
+            modifierBorder: '#5b4679',
+            modifierLabel: '#241432',
             stateFill: '#f1d79a',
             stateBorder: '#a5721f',
             stateLabel: '#4c3403',
@@ -153,6 +156,9 @@
             operationFill: '#7d6797',
             operationBorder: '#e3d7ee',
             operationLabel: '#fbf7ff',
+            modifierFill: '#9376bb',
+            modifierBorder: '#f1e8fb',
+            modifierLabel: '#fffaff',
             stateFill: '#c49d3f',
             stateBorder: '#f0d48d',
             stateLabel: '#211905',
@@ -906,9 +912,18 @@
         return directChildNodes;
     }
 
-    function getRulevizBrowserNodeKind(sourceColor, shape, parentId, parentNodeKind) {
+    function isRulevizBrowserWildcardBondModifierLabel(labelText) {
+        const normalizedLabel = (labelText || '').trim();
+        return normalizedLabel === '+' || normalizedLabel === '?';
+    }
+
+    function getRulevizBrowserNodeKind(sourceColor, shape, parentId, parentNodeKind, labelText) {
         const normalizedColor = normalizeColorKey(sourceColor);
         const normalizedShape = (shape || '').toLowerCase();
+
+        if (isRulevizBrowserWildcardBondModifierLabel(labelText)) {
+            return 'modifier';
+        }
 
         if (normalizedColor === '#cc99ff') {
             return 'operation';
@@ -943,6 +958,7 @@
             case 'component':
             case 'rule':
                 return 'round-rectangle';
+            case 'modifier':
             case 'state':
             case 'operation':
             default:
@@ -989,6 +1005,13 @@
                     width: clampNumber((textLength * 8) + 28, 68, 132),
                     height: 38
                 };
+            case 'modifier': {
+                const diameter = clampNumber((textLength * 8) + 28, 40, 48);
+                return {
+                    width: diameter,
+                    height: diameter
+                };
+            }
             case 'state':
                 return {
                     width: clampNumber((textLength * 8) + 16, 48, 102),
@@ -1087,6 +1110,59 @@
         return 0;
     }
 
+    function getRulevizBrowserNodeLabelFontSize(nodeKind, sourceFontSize, displayWidth, displayHeight, labelText, hasDirectChildren) {
+        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        if (contactMapLabelKind) {
+            return getContactMapLabelFontSize(
+                contactMapLabelKind,
+                sourceFontSize,
+                displayWidth,
+                displayHeight,
+                labelText,
+                hasDirectChildren
+            );
+        }
+
+        const textLength = Math.max((labelText || '').trim().length, 1);
+
+        switch (nodeKind) {
+            case 'modifier': {
+                const widthBudget = Math.max(24, displayWidth - 8);
+                const widthDrivenSize = widthBudget / Math.max(textLength * 0.7, 1.4);
+                const heightDrivenSize = displayHeight * 0.48;
+                return Math.max(sourceFontSize, clampNumber(Math.min(widthDrivenSize, heightDrivenSize), 16, 19));
+            }
+            case 'operation': {
+                const widthBudget = Math.max(42, displayWidth - 16);
+                const widthDrivenSize = widthBudget / Math.max(textLength * 0.76, 2.2);
+                const heightDrivenSize = displayHeight * 0.46;
+                return Math.max(sourceFontSize, clampNumber(Math.min(widthDrivenSize, heightDrivenSize), 14, 18));
+            }
+            default: {
+                const widthBudget = Math.max(42, displayWidth - 16);
+                const widthDrivenSize = widthBudget / Math.max(textLength * 0.72, 2.2);
+                const heightDrivenSize = displayHeight * 0.44;
+                return Math.max(sourceFontSize, clampNumber(Math.min(widthDrivenSize, heightDrivenSize), 13, 18));
+            }
+        }
+    }
+
+    function getRulevizBrowserMinZoomedFontSize(nodeKind) {
+        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        if (contactMapLabelKind) {
+            return getContactMapMinZoomedFontSize(contactMapLabelKind);
+        }
+
+        switch (nodeKind) {
+            case 'modifier':
+                return 12;
+            case 'operation':
+                return 11;
+            default:
+                return 0;
+        }
+    }
+
     function getRulevizBrowserCompoundPadding(nodeKind, hasDirectChildren) {
         if (!hasDirectChildren) {
             return 0;
@@ -1118,6 +1194,8 @@
                 return palette.ruleFill;
             case 'operation':
                 return palette.operationFill;
+            case 'modifier':
+                return palette.modifierFill;
             case 'state':
                 return palette.stateFill;
             default:
@@ -1136,6 +1214,8 @@
                 return palette.ruleBorder;
             case 'operation':
                 return palette.operationBorder;
+            case 'modifier':
+                return palette.modifierBorder;
             case 'state':
                 return palette.stateBorder;
             default:
@@ -1154,6 +1234,8 @@
                 return palette.ruleLabel;
             case 'operation':
                 return palette.operationLabel;
+            case 'modifier':
+                return palette.modifierLabel;
             case 'state':
                 return palette.stateLabel;
             default:
@@ -1330,7 +1412,7 @@
             labelFontSize = Number.isFinite(labelFontSize) && labelFontSize > 0 ? labelFontSize : 12;
 
             const hasDirectChildren = getDirectChildNodeElements(node).length > 0;
-            const nodeKind = getRulevizBrowserNodeKind(backgroundColor, shape, parentId, parentNodeKind);
+            const nodeKind = getRulevizBrowserNodeKind(backgroundColor, shape, parentId, parentNodeKind, labelText);
             const dimensions = getRulevizBrowserNodeDimensions(nodeKind, labelText, hasDirectChildren);
             const labelValign = getRulevizBrowserNodeLabelValign(nodeKind);
             const labelHalign = getRulevizBrowserNodeLabelHalign(nodeKind);
@@ -1339,6 +1421,14 @@
             const labelMarginY = getRulevizBrowserNodeLabelMarginY(nodeKind, hasDirectChildren, dimensions.height);
             const labelBackgroundOpacity = getRulevizBrowserNodeLabelBackgroundOpacity(nodeKind);
             const labelBackgroundPadding = getRulevizBrowserNodeLabelBackgroundPadding(nodeKind);
+            const computedLabelFontSize = getRulevizBrowserNodeLabelFontSize(
+                nodeKind,
+                labelFontSize,
+                dimensions.width,
+                dimensions.height,
+                labelText,
+                hasDirectChildren
+            );
             const compoundPadding = getRulevizBrowserCompoundPadding(nodeKind, hasDirectChildren);
             const labelMaxWidth = getRulevizBrowserNodeLabelMaxWidth(nodeKind, hasDirectChildren, dimensions.width);
             const effectiveLabelText = nodeKind === 'rule' ? '' : labelText;
@@ -1360,8 +1450,8 @@
                     labelText: effectiveLabelText,
                     displayLabelBackgroundColor: labelBackgroundOpacity > 0 ? backgroundColor : 'transparent',
                     displayLabelColor: labelColor,
-                    labelWeight: nodeKind === 'rule' || (nodeKind === 'molecule' && hasDirectChildren) ? 'bold' : labelWeight,
-                    labelFontSize: Math.max(labelFontSize, nodeKind === 'state' ? 11 : (nodeKind === 'molecule' && hasDirectChildren ? 13 : 12)),
+                    labelWeight: nodeKind === 'rule' || nodeKind === 'modifier' || (nodeKind === 'molecule' && hasDirectChildren) ? 'bold' : labelWeight,
+                    labelFontSize: computedLabelFontSize,
                     labelValign: labelValign,
                     labelHalign: labelHalign,
                     labelJustification: labelJustification,
@@ -1373,7 +1463,7 @@
                     compoundPadding: compoundPadding,
                     minCompoundWidth: hasDirectChildren ? dimensions.width : 0,
                     minCompoundHeight: hasDirectChildren ? dimensions.height : 0,
-                    minZoomedFontSize: 0
+                    minZoomedFontSize: getRulevizBrowserMinZoomedFontSize(nodeKind)
                 }
             });
             nodeCount += 1;
