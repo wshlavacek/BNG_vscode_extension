@@ -532,8 +532,8 @@
         });
     }
 
-    function pluralize(count, noun) {
-        return `${count} ${noun}${count === 1 ? '' : 's'}`;
+    function pluralize(count, singular, plural = `${singular}s`) {
+        return `${count} ${count === 1 ? singular : plural}`;
     }
 
     function getPlotRowCount(columns) {
@@ -561,7 +561,7 @@
             summaryParts.push(pluralize(rowCount, 'row'));
         }
         if (seriesCount > 0) {
-            summaryParts.push(pluralize(seriesCount, 'plotted series'));
+            summaryParts.push(pluralize(seriesCount, 'plotted series', 'plotted series'));
         }
 
         plotSourceSummary.textContent = summaryParts.join(' • ') || 'No plotted data detected.';
