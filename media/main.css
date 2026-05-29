@@ -334,24 +334,24 @@ body.plot-view {
 }
 
 .ruleviz-browser-rule-label {
-	font-size: 1.02em;
+	font-size: 1.06em;
 	font-weight: 600;
 	line-height: 1.25;
-	color: var(--ruleviz-browser-label-foreground, var(--viewer-foreground));
+	color: var(--ruleviz-browser-rule-label-foreground, var(--ruleviz-browser-label-foreground, var(--viewer-foreground)));
 	word-break: break-all;
 }
 
 .ruleviz-browser-rule-bngl {
 	grid-column: 1 / -1;
 	margin: 0;
-	padding: 12px 14px;
+	padding: 14px 16px;
 	border: 1px solid var(--ruleviz-browser-canvas-border, var(--viewer-border));
 	border-radius: 12px;
 	background: var(--ruleviz-browser-canvas-background, var(--viewer-panel-background));
 	color: var(--ruleviz-browser-label-foreground, var(--viewer-foreground));
 	font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
-	font-size: 0.88em;
-	line-height: 1.45;
+	font-size: 0.98em;
+	line-height: 1.5;
 	white-space: pre-wrap;
 	word-break: break-word;
 	overflow-wrap: anywhere;

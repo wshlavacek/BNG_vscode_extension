@@ -114,6 +114,7 @@
             canvasBorder: '#ddd3c4',
             labelForeground: '#1f2a30',
             mutedForeground: '#6f7169',
+            ruleLabelForeground: '#6f5b8e',
             moleculeFill: '#dbc8af',
             moleculeBorder: '#735a3d',
             moleculeLabel: '#2d2012',
@@ -144,6 +145,7 @@
             canvasBorder: '#38444c',
             labelForeground: '#eef3ee',
             mutedForeground: '#a8b0a8',
+            ruleLabelForeground: '#e3d7ee',
             moleculeFill: '#6e5a44',
             moleculeBorder: '#d5c0a0',
             moleculeLabel: '#f8f1e3',
@@ -1002,11 +1004,11 @@
                     };
             case 'operation':
                 return {
-                    width: clampNumber((textLength * 8) + 28, 68, 132),
-                    height: 38
+                    width: clampNumber((textLength * 9) + 34, 74, 144),
+                    height: 44
                 };
             case 'modifier': {
-                const diameter = clampNumber((textLength * 8) + 28, 40, 48);
+                const diameter = clampNumber((textLength * 9) + 30, 46, 54);
                 return {
                     width: diameter,
                     height: diameter
@@ -1025,7 +1027,7 @@
         }
     }
 
-    function getRulevizBrowserContactMapLabelKind(nodeKind) {
+    function getRulevizBrowserContactMapNodeKind(nodeKind) {
         switch (nodeKind) {
             case 'molecule':
                 return 'molecule';
@@ -1039,7 +1041,7 @@
     }
 
     function getRulevizBrowserNodeLabelValign(nodeKind) {
-        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        const contactMapLabelKind = getRulevizBrowserContactMapNodeKind(nodeKind);
         if (contactMapLabelKind) {
             return getContactMapLabelValign(contactMapLabelKind);
         }
@@ -1048,7 +1050,7 @@
     }
 
     function getRulevizBrowserNodeLabelHalign(nodeKind) {
-        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        const contactMapLabelKind = getRulevizBrowserContactMapNodeKind(nodeKind);
         if (contactMapLabelKind) {
             return getContactMapLabelHalign(contactMapLabelKind);
         }
@@ -1057,7 +1059,7 @@
     }
 
     function getRulevizBrowserNodeLabelJustification(nodeKind) {
-        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        const contactMapLabelKind = getRulevizBrowserContactMapNodeKind(nodeKind);
         if (contactMapLabelKind) {
             return getContactMapLabelJustification(contactMapLabelKind);
         }
@@ -1066,7 +1068,7 @@
     }
 
     function getRulevizBrowserNodeLabelMarginX(nodeKind, _hasDirectChildren, displayWidth) {
-        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        const contactMapLabelKind = getRulevizBrowserContactMapNodeKind(nodeKind);
         if (contactMapLabelKind) {
             return getContactMapLabelMarginX(contactMapLabelKind, displayWidth);
         }
@@ -1075,7 +1077,7 @@
     }
 
     function getRulevizBrowserNodeLabelMarginY(nodeKind, _hasDirectChildren, displayHeight) {
-        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        const contactMapLabelKind = getRulevizBrowserContactMapNodeKind(nodeKind);
         if (contactMapLabelKind) {
             return getContactMapLabelMarginY(contactMapLabelKind, displayHeight);
         }
@@ -1084,7 +1086,7 @@
     }
 
     function getRulevizBrowserNodeLabelMaxWidth(nodeKind, hasDirectChildren, displayWidth) {
-        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        const contactMapLabelKind = getRulevizBrowserContactMapNodeKind(nodeKind);
         if (contactMapLabelKind) {
             return getContactMapLabelMaxWidth(contactMapLabelKind, displayWidth, hasDirectChildren);
         }
@@ -1093,7 +1095,7 @@
     }
 
     function getRulevizBrowserNodeLabelBackgroundOpacity(nodeKind) {
-        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        const contactMapLabelKind = getRulevizBrowserContactMapNodeKind(nodeKind);
         if (contactMapLabelKind) {
             return getContactMapLabelBackgroundOpacity(contactMapLabelKind);
         }
@@ -1102,7 +1104,7 @@
     }
 
     function getRulevizBrowserNodeLabelBackgroundPadding(nodeKind) {
-        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        const contactMapLabelKind = getRulevizBrowserContactMapNodeKind(nodeKind);
         if (contactMapLabelKind) {
             return getContactMapLabelBackgroundPadding(contactMapLabelKind);
         }
@@ -1111,7 +1113,7 @@
     }
 
     function getRulevizBrowserNodeLabelFontSize(nodeKind, sourceFontSize, displayWidth, displayHeight, labelText, hasDirectChildren) {
-        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        const contactMapLabelKind = getRulevizBrowserContactMapNodeKind(nodeKind);
         if (contactMapLabelKind) {
             return getContactMapLabelFontSize(
                 contactMapLabelKind,
@@ -1128,15 +1130,15 @@
         switch (nodeKind) {
             case 'modifier': {
                 const widthBudget = Math.max(24, displayWidth - 8);
-                const widthDrivenSize = widthBudget / Math.max(textLength * 0.7, 1.4);
-                const heightDrivenSize = displayHeight * 0.48;
-                return Math.max(sourceFontSize, clampNumber(Math.min(widthDrivenSize, heightDrivenSize), 16, 19));
+                const widthDrivenSize = widthBudget / Math.max(textLength * 0.64, 1.2);
+                const heightDrivenSize = displayHeight * 0.52;
+                return Math.max(sourceFontSize, clampNumber(Math.min(widthDrivenSize, heightDrivenSize), 19, 24));
             }
             case 'operation': {
                 const widthBudget = Math.max(42, displayWidth - 16);
-                const widthDrivenSize = widthBudget / Math.max(textLength * 0.76, 2.2);
-                const heightDrivenSize = displayHeight * 0.46;
-                return Math.max(sourceFontSize, clampNumber(Math.min(widthDrivenSize, heightDrivenSize), 14, 18));
+                const widthDrivenSize = widthBudget / Math.max(textLength * 0.72, 2);
+                const heightDrivenSize = displayHeight * 0.5;
+                return Math.max(sourceFontSize, clampNumber(Math.min(widthDrivenSize, heightDrivenSize), 16, 21));
             }
             default: {
                 const widthBudget = Math.max(42, displayWidth - 16);
@@ -1148,19 +1150,46 @@
     }
 
     function getRulevizBrowserMinZoomedFontSize(nodeKind) {
-        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
-        if (contactMapLabelKind) {
-            return getContactMapMinZoomedFontSize(contactMapLabelKind);
+        const contactMapNodeKind = getRulevizBrowserContactMapNodeKind(nodeKind);
+        if (contactMapNodeKind) {
+            return getContactMapMinZoomedFontSize(contactMapNodeKind);
         }
 
         switch (nodeKind) {
             case 'modifier':
-                return 12;
+                return 14;
             case 'operation':
-                return 11;
+                return 13;
             default:
                 return 0;
         }
+    }
+
+    function getRulevizBrowserNodeBorderWidth(nodeKind, sourceBorderWidth) {
+        const contactMapNodeKind = getRulevizBrowserContactMapNodeKind(nodeKind);
+        if (contactMapNodeKind) {
+            return getContactMapBorderWidth(contactMapNodeKind, sourceBorderWidth);
+        }
+
+        const parsedWidth = parseFloat(sourceBorderWidth);
+        return Number.isFinite(parsedWidth) && parsedWidth > 0 ? parsedWidth : 1;
+    }
+
+    function getRulevizBrowserEdgeWidth(sourceEdgeWidth, sourceNodeKind, targetNodeKind) {
+        const parsedWidth = parseFloat(sourceEdgeWidth);
+        const baseWidth = Number.isFinite(parsedWidth) && parsedWidth > 0 ? parsedWidth : 1;
+        const sourceContactMapKind = getRulevizBrowserContactMapNodeKind(sourceNodeKind);
+        const targetContactMapKind = getRulevizBrowserContactMapNodeKind(targetNodeKind);
+
+        if (sourceContactMapKind === 'state' || targetContactMapKind === 'state') {
+            return Math.max(baseWidth, 1.5);
+        }
+
+        if (sourceContactMapKind || targetContactMapKind) {
+            return Math.max(baseWidth, 1.8);
+        }
+
+        return baseWidth;
     }
 
     function getRulevizBrowserCompoundPadding(nodeKind, hasDirectChildren) {
@@ -1183,63 +1212,60 @@
         return 0;
     }
 
-    function getRulevizBrowserNodeFillColor(nodeKind) {
+    function getRulevizBrowserNodeFillColor(nodeKind, sourceColor) {
+        const contactMapNodeKind = getRulevizBrowserContactMapNodeKind(nodeKind);
+        if (contactMapNodeKind) {
+            return getContactMapBaseFillColor(contactMapNodeKind, sourceColor);
+        }
+
         const palette = getRulevizBrowserPalette();
         switch (nodeKind) {
-            case 'molecule':
-                return palette.moleculeFill;
-            case 'component':
-                return palette.componentFill;
             case 'rule':
                 return palette.ruleFill;
             case 'operation':
                 return palette.operationFill;
             case 'modifier':
                 return palette.modifierFill;
-            case 'state':
-                return palette.stateFill;
             default:
-                return palette.componentFill;
+                return sourceColor || palette.componentFill;
         }
     }
 
-    function getRulevizBrowserNodeBorderColor(nodeKind) {
+    function getRulevizBrowserNodeBorderColor(nodeKind, sourceColor) {
+        const contactMapNodeKind = getRulevizBrowserContactMapNodeKind(nodeKind);
+        if (contactMapNodeKind) {
+            return getContactMapBaseBorderColor(contactMapNodeKind, sourceColor);
+        }
+
         const palette = getRulevizBrowserPalette();
         switch (nodeKind) {
-            case 'molecule':
-                return palette.moleculeBorder;
-            case 'component':
-                return palette.componentBorder;
             case 'rule':
                 return palette.ruleBorder;
             case 'operation':
                 return palette.operationBorder;
             case 'modifier':
                 return palette.modifierBorder;
-            case 'state':
-                return palette.stateBorder;
             default:
-                return palette.componentBorder;
+                return sourceColor || palette.componentBorder;
         }
     }
 
-    function getRulevizBrowserNodeLabelColor(nodeKind) {
+    function getRulevizBrowserNodeLabelColor(nodeKind, sourceColor) {
+        const contactMapNodeKind = getRulevizBrowserContactMapNodeKind(nodeKind);
+        if (contactMapNodeKind) {
+            return getContactMapBaseLabelColor(contactMapNodeKind, sourceColor);
+        }
+
         const palette = getRulevizBrowserPalette();
         switch (nodeKind) {
-            case 'molecule':
-                return palette.moleculeLabel;
-            case 'component':
-                return palette.componentLabel;
             case 'rule':
                 return palette.ruleLabel;
             case 'operation':
                 return palette.operationLabel;
             case 'modifier':
                 return palette.modifierLabel;
-            case 'state':
-                return palette.stateLabel;
             default:
-                return palette.componentLabel;
+                return sourceColor || palette.labelForeground;
         }
     }
 
@@ -1261,6 +1287,7 @@
         rulevizBrowser.style.setProperty('--ruleviz-browser-canvas-border', palette.canvasBorder);
         rulevizBrowser.style.setProperty('--ruleviz-browser-label-foreground', palette.labelForeground);
         rulevizBrowser.style.setProperty('--ruleviz-browser-muted-foreground', palette.mutedForeground);
+        rulevizBrowser.style.setProperty('--ruleviz-browser-rule-label-foreground', palette.ruleLabelForeground);
         rulevizBrowser.style.background = palette.background;
     }
 
@@ -1381,6 +1408,7 @@
             nodes: [],
             edges: []
         };
+        const nodeKindsById = {};
         let nodeCount = 0;
 
         function addRulevizNode(node, parentId, parentNodeKind) {
@@ -1432,6 +1460,10 @@
             const compoundPadding = getRulevizBrowserCompoundPadding(nodeKind, hasDirectChildren);
             const labelMaxWidth = getRulevizBrowserNodeLabelMaxWidth(nodeKind, hasDirectChildren, dimensions.width);
             const effectiveLabelText = nodeKind === 'rule' ? '' : labelText;
+            const displayBackgroundColor = getRulevizBrowserNodeFillColor(nodeKind, backgroundColor);
+            const displayBorderColor = getRulevizBrowserNodeBorderColor(nodeKind, borderColor);
+            const displayLabelColor = getRulevizBrowserNodeLabelColor(nodeKind, labelColor);
+            const displayBorderWidth = getRulevizBrowserNodeBorderWidth(nodeKind, borderWidth);
 
             cytoElements.nodes.push({
                 data: {
@@ -1439,17 +1471,17 @@
                     parent: parentId || undefined,
                     nodeKind: nodeKind,
                     backgroundColor: backgroundColor,
-                    displayBackgroundColor: backgroundColor,
+                    displayBackgroundColor: displayBackgroundColor,
                     borderColor: borderColor,
-                    displayBorderColor: borderColor,
+                    displayBorderColor: displayBorderColor,
                     borderWidth: borderWidth,
-                    displayBorderWidth: Number.isFinite(parseFloat(borderWidth)) ? parseFloat(borderWidth) : 1,
+                    displayBorderWidth: displayBorderWidth,
                     nodeShape: getRulevizBrowserNodeShape(nodeKind),
                     width: dimensions.width,
                     height: dimensions.height,
                     labelText: effectiveLabelText,
-                    displayLabelBackgroundColor: labelBackgroundOpacity > 0 ? backgroundColor : 'transparent',
-                    displayLabelColor: labelColor,
+                    displayLabelBackgroundColor: labelBackgroundOpacity > 0 ? displayBackgroundColor : 'transparent',
+                    displayLabelColor: displayLabelColor,
                     labelWeight: nodeKind === 'rule' || nodeKind === 'modifier' || (nodeKind === 'molecule' && hasDirectChildren) ? 'bold' : labelWeight,
                     labelFontSize: computedLabelFontSize,
                     labelValign: labelValign,
@@ -1466,6 +1498,7 @@
                     minZoomedFontSize: getRulevizBrowserMinZoomedFontSize(nodeKind)
                 }
             });
+            nodeKindsById[nodeId] = nodeKind;
             nodeCount += 1;
 
             if (node.getAttribute('yfiles.foldertype') === 'group' && hasDirectChildren) {
@@ -1506,13 +1539,15 @@
 
             let arrow = edge.getElementsByTagName('y:Arrows').item(0);
             arrow = arrow ? arrow.getAttribute('target') : null;
+            const sourceNodeKind = nodeKindsById[source] || 'other';
+            const targetNodeKind = nodeKindsById[target] || 'other';
 
             cytoElements.edges.push({
                 data: {
                     id: edge.getAttribute('id') || `e${index}`,
                     source: source,
                     target: target,
-                    lineWidth: lineWidth,
+                    lineWidth: getRulevizBrowserEdgeWidth(lineWidth, sourceNodeKind, targetNodeKind),
                     displayLineColor: lineColor,
                     displayArrowColor: lineColor,
                     arrow: arrow === 'standard' ? 'triangle' : 'none'
@@ -1664,10 +1699,10 @@
             card.cy.batch(() => {
                 card.cy.nodes().forEach((node) => {
                     const nodeKind = node.data('nodeKind') || 'component';
-                    const fill = getRulevizBrowserNodeFillColor(nodeKind);
-                    const border = getRulevizBrowserNodeBorderColor(nodeKind);
+                    const fill = getRulevizBrowserNodeFillColor(nodeKind, node.data('backgroundColor'));
+                    const border = getRulevizBrowserNodeBorderColor(nodeKind, node.data('borderColor'));
                     const labelColor = ensureTextContrast(
-                        getRulevizBrowserNodeLabelColor(nodeKind),
+                        getRulevizBrowserNodeLabelColor(nodeKind, node.data('labelColor') || node.data('displayLabelColor')),
                         fill,
                         4.5
                     );
