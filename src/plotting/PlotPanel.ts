@@ -2,7 +2,9 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { parseDat } from '../parseDat';
 import { parseBnglDocument } from '../server/parser';
-import { getGraphmlVisualizationKind, getStandaloneGraphPaletteKind } from '../resultsFolders';
+import { getGraphmlVisualizationKind, getStandaloneGraphPaletteKind, shouldUseStandaloneRulevizLayout } from '../resultsFolders';
+
+type RulevizViewKind = 'operation' | 'pattern';
 
 function getNonce(): string {
     let text = '';
@@ -17,24 +19,24 @@ function escapeHtml(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function getCanonicalRulevizOperationBrowserBaseName(filePath: string): string | undefined {
+function getCanonicalRulevizBrowserBaseName(filePath: string): string | undefined {
     const extension = path.extname(filePath).toLowerCase();
     if (extension !== '.graphml') {
         return undefined;
     }
 
     const graphBaseName = path.basename(filePath, path.extname(filePath));
-    const match = graphBaseName.match(/^(.*_ruleviz_operation)_.+$/i);
+    const match = graphBaseName.match(/^(.*_ruleviz_(?:operation|pattern))_.+$/i);
     return match?.[1];
 }
 
 function getCanonicalGraphmlBaseName(filePath: string): string {
-    return getCanonicalRulevizOperationBrowserBaseName(filePath)
+    return getCanonicalRulevizBrowserBaseName(filePath)
         ?? path.basename(filePath, path.extname(filePath));
 }
 
 function getPlotPanelKey(filePath: string): string {
-    const canonicalRulevizBaseName = getCanonicalRulevizOperationBrowserBaseName(filePath);
+    const canonicalRulevizBaseName = getCanonicalRulevizBrowserBaseName(filePath);
     if (!canonicalRulevizBaseName) {
         return filePath;
     }
@@ -111,30 +113,44 @@ function getRegulatoryReverseRuleDisplayLabels(displayLabel: string): string[] {
     return Array.from(variants);
 }
 
-function getRulevizOperationReverseRuleDisplayLabel(displayLabel: string): string {
+function getRulevizReverseRuleDisplayLabel(displayLabel: string): string {
     return `_reverse_${displayLabel.trim()}`;
 }
 
-function getRulevizOperationSplitSuffix(fileName: string): string | undefined {
+function getRulevizSplitGraphName(viewKind: RulevizViewKind): string {
+    return viewKind === 'pattern' ? 'ruleviz_pattern' : 'ruleviz_operation';
+}
+
+function getRulevizSplitSuffix(fileName: string, viewKind: RulevizViewKind): string | undefined {
     if (path.extname(fileName).toLowerCase() !== '.graphml') {
         return undefined;
     }
 
     const baseName = path.basename(fileName, path.extname(fileName));
-    const match = baseName.match(/^(.*_ruleviz_operation)_(.+)$/i);
+    const match = baseName.match(new RegExp(`^(.*_${getRulevizSplitGraphName(viewKind)})_(.+)$`, 'i'));
     return match?.[2];
 }
 
-function isRulevizOperationSplitGraphmlFileName(fileName: string): boolean {
-    return getGraphmlVisualizationKind(fileName) === 'ruleviz_operation'
-        && typeof getRulevizOperationSplitSuffix(fileName) === 'string';
+function isRulevizSplitGraphmlFileName(fileName: string, viewKind: RulevizViewKind): boolean {
+    return getGraphmlVisualizationKind(fileName) === getRulevizSplitGraphName(viewKind)
+        && typeof getRulevizSplitSuffix(fileName, viewKind) === 'string';
 }
 
-interface RulevizOperationBrowserRow {
+interface RulevizBrowserRow {
     fileName: string;
     graphmlText: string;
     displayLabel: string;
     bnglText?: string;
+}
+
+interface RulevizBrowserViewData {
+    graphKind: `ruleviz_${RulevizViewKind}`;
+    rows: RulevizBrowserRow[];
+}
+
+interface RulevizBrowserViews {
+    operation?: RulevizBrowserViewData;
+    pattern?: RulevizBrowserViewData;
 }
 
 async function getRegulatoryRuleBnglByLabel(
@@ -178,13 +194,14 @@ async function getRegulatoryRuleBnglByLabel(
     return Object.keys(byLabel).length === 0 ? undefined : byLabel;
 }
 
-async function getRulevizOperationBrowserRows(
+async function getRulevizBrowserRows(
     graphmlPath: string,
     folderUri: vscode.Uri,
-    siblingNames: readonly string[]
-): Promise<RulevizOperationBrowserRow[] | undefined> {
+    siblingNames: readonly string[],
+    viewKind: RulevizViewKind
+): Promise<RulevizBrowserRow[] | undefined> {
     const splitGraphmlNames = siblingNames
-        .filter(isRulevizOperationSplitGraphmlFileName)
+        .filter((name) => isRulevizSplitGraphmlFileName(name, viewKind))
         .sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }));
 
     if (splitGraphmlNames.length === 0) {
@@ -193,13 +210,13 @@ async function getRulevizOperationBrowserRows(
 
     const graphmlNameBySuffix = new Map<string, string>();
     splitGraphmlNames.forEach((name) => {
-        const suffix = getRulevizOperationSplitSuffix(name);
+        const suffix = getRulevizSplitSuffix(name, viewKind);
         if (suffix) {
             graphmlNameBySuffix.set(suffix, name);
         }
     });
 
-    const orderedRows: Array<Omit<RulevizOperationBrowserRow, 'graphmlText'>> = [];
+    const orderedRows: Array<Omit<RulevizBrowserRow, 'graphmlText'>> = [];
     const consumedFileNames = new Set<string>();
     const bnglName = getPreferredSiblingBnglName(graphmlPath, siblingNames);
 
@@ -228,7 +245,7 @@ async function getRulevizOperationBrowserRows(
                     return;
                 }
 
-                const reverseDisplayLabel = getRulevizOperationReverseRuleDisplayLabel(displayLabel);
+                const reverseDisplayLabel = getRulevizReverseRuleDisplayLabel(displayLabel);
                 const reverseFileName = graphmlNameBySuffix.get(reverseDisplayLabel);
                 if (!reverseFileName) {
                     return;
@@ -251,7 +268,7 @@ async function getRulevizOperationBrowserRows(
             return;
         }
 
-        const suffix = getRulevizOperationSplitSuffix(name);
+        const suffix = getRulevizSplitSuffix(name, viewKind);
         if (!suffix) {
             return;
         }
@@ -266,7 +283,7 @@ async function getRulevizOperationBrowserRows(
         return undefined;
     }
 
-    const rows: RulevizOperationBrowserRow[] = [];
+    const rows: RulevizBrowserRow[] = [];
     for (const row of orderedRows) {
         const graphmlUri = vscode.Uri.joinPath(folderUri, row.fileName);
         const rawBytes = await vscode.workspace.fs.readFile(graphmlUri);
@@ -277,6 +294,36 @@ async function getRulevizOperationBrowserRows(
     }
 
     return rows;
+}
+
+async function getRulevizBrowserViews(
+    graphmlPath: string,
+    folderUri: vscode.Uri,
+    siblingNames: readonly string[]
+): Promise<RulevizBrowserViews | undefined> {
+    const [operationRows, patternRows] = await Promise.all([
+        getRulevizBrowserRows(graphmlPath, folderUri, siblingNames, 'operation'),
+        getRulevizBrowserRows(graphmlPath, folderUri, siblingNames, 'pattern')
+    ]);
+
+    if (!operationRows && !patternRows) {
+        return undefined;
+    }
+
+    return {
+        operation: operationRows
+            ? {
+                graphKind: 'ruleviz_operation',
+                rows: operationRows
+            }
+            : undefined,
+        pattern: patternRows
+            ? {
+                graphKind: 'ruleviz_pattern',
+                rows: patternRows
+            }
+            : undefined
+    };
 }
 
 export class PlotPanel {
@@ -404,6 +451,7 @@ export class PlotPanel {
                       <button id="fit_button" class="secondary" type="button">Scale to Fit</button>
                       <button id="view_mode_button" class="secondary" type="button">Night View</button>
                       <button id="toggle_rule_bngl_button" class="secondary" type="button" hidden>Show Rule BNGL</button>
+                      <button id="toggle_ruleviz_view_button" class="secondary" type="button" hidden>Show Pattern</button>
                       <button id="toggle_components_button" class="secondary" type="button" hidden>Hide Components</button>
                       <button id="toggle_internal_states_button" class="secondary" type="button" hidden>Hide Internal States</button>
                     </div>
@@ -505,8 +553,9 @@ export class PlotPanel {
             const folderUri = vscode.Uri.file(path.dirname(this._fpath));
             const graphKind = getGraphmlVisualizationKind(this._fpath);
             let standaloneGraphPaletteKind: string | null = null;
+            let useStandaloneRulevizBrowser = false;
             let regulatoryRuleBnglByLabel: Record<string, string> | undefined;
-            let rulevizOperationBrowserRows: RulevizOperationBrowserRow[] | undefined;
+            let rulevizBrowserViews: RulevizBrowserViews | undefined;
 
             try {
                 const entries = await vscode.workspace.fs.readDirectory(folderUri);
@@ -515,25 +564,34 @@ export class PlotPanel {
                     this._fpath,
                     siblingNames
                 );
+                useStandaloneRulevizBrowser = shouldUseStandaloneRulevizLayout(
+                    this._fpath,
+                    siblingNames
+                );
                 if (graphKind === 'regulatory') {
                     regulatoryRuleBnglByLabel = await getRegulatoryRuleBnglByLabel(this._fpath, folderUri, siblingNames);
                 }
-                if (graphKind === 'ruleviz_operation' && standaloneGraphPaletteKind === 'ruleviz_operation') {
-                    rulevizOperationBrowserRows = await getRulevizOperationBrowserRows(this._fpath, folderUri, siblingNames);
+                if ((graphKind === 'ruleviz_operation' || graphKind === 'ruleviz_pattern') && useStandaloneRulevizBrowser) {
+                    rulevizBrowserViews = await getRulevizBrowserViews(this._fpath, folderUri, siblingNames);
                 }
             } catch {
                 standaloneGraphPaletteKind = null;
+                useStandaloneRulevizBrowser = false;
                 regulatoryRuleBnglByLabel = undefined;
-                rulevizOperationBrowserRows = undefined;
+                rulevizBrowserViews = undefined;
             }
 
-            if (graphKind === 'ruleviz_operation' && standaloneGraphPaletteKind === 'ruleviz_operation' && rulevizOperationBrowserRows) {
+            if ((graphKind === 'ruleviz_operation' || graphKind === 'ruleviz_pattern') && useStandaloneRulevizBrowser && rulevizBrowserViews) {
+                const initialView = graphKind === 'ruleviz_pattern'
+                    ? 'pattern'
+                    : 'operation';
                 this._panel.webview.postMessage({
                     command: 'ruleviz-browser',
                     context: 'data',
-                    graphKind,
-                    standaloneGraphPaletteKind,
-                    rows: rulevizOperationBrowserRows
+                    graphKind: 'ruleviz',
+                    standaloneGraphPaletteKind: 'ruleviz',
+                    initialView,
+                    views: rulevizBrowserViews
                 });
                 return;
             }

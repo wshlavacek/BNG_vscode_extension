@@ -97,6 +97,8 @@ suite('PlotPanel', () => {
     let regulatoryGraphmlPath: string;
     let rulevizOperationGraphmlPath: string;
     let splitRulevizOperationGraphmlPath: string;
+    let splitDualRulevizOperationGraphmlPath: string;
+    let splitDualRulevizPatternGraphmlPath: string;
 
     suiteSetup(async function () {
         this.timeout(30_000);
@@ -113,8 +115,9 @@ suite('PlotPanel', () => {
         const regulatoryDir = path.join(tmpDir, 'regulatory');
         const rulevizDir = path.join(tmpDir, 'ruleviz');
         const splitRulevizDir = path.join(tmpDir, 'ruleviz_split');
+        const splitDualRulevizDir = path.join(tmpDir, 'ruleviz_split_dual');
 
-        [contactMapDir, regulatoryDir, rulevizDir, splitRulevizDir].forEach((dir) => {
+        [contactMapDir, regulatoryDir, rulevizDir, splitRulevizDir, splitDualRulevizDir].forEach((dir) => {
             fs.mkdirSync(dir, { recursive: true });
             fs.writeFileSync(path.join(dir, 'test_model.bngl'), SAMPLE_MODEL_BNGL, 'utf8');
         });
@@ -130,6 +133,15 @@ suite('PlotPanel', () => {
         fs.writeFileSync(splitRulevizOperationGraphmlPath, SAMPLE_GRAPHML, 'utf8');
         fs.writeFileSync(path.join(splitRulevizDir, 'test_model_ruleviz_operation__reverse__R1.graphml'), SAMPLE_GRAPHML, 'utf8');
         fs.writeFileSync(path.join(splitRulevizDir, 'test_model_ruleviz_operation_namedRule.graphml'), SAMPLE_GRAPHML, 'utf8');
+
+        splitDualRulevizOperationGraphmlPath = path.join(splitDualRulevizDir, 'test_model_ruleviz_operation__R1.graphml');
+        splitDualRulevizPatternGraphmlPath = path.join(splitDualRulevizDir, 'test_model_ruleviz_pattern__R1.graphml');
+        fs.writeFileSync(splitDualRulevizOperationGraphmlPath, SAMPLE_GRAPHML, 'utf8');
+        fs.writeFileSync(path.join(splitDualRulevizDir, 'test_model_ruleviz_operation__reverse__R1.graphml'), SAMPLE_GRAPHML, 'utf8');
+        fs.writeFileSync(path.join(splitDualRulevizDir, 'test_model_ruleviz_operation_namedRule.graphml'), SAMPLE_GRAPHML, 'utf8');
+        fs.writeFileSync(splitDualRulevizPatternGraphmlPath, SAMPLE_GRAPHML, 'utf8');
+        fs.writeFileSync(path.join(splitDualRulevizDir, 'test_model_ruleviz_pattern__reverse__R1.graphml'), SAMPLE_GRAPHML, 'utf8');
+        fs.writeFileSync(path.join(splitDualRulevizDir, 'test_model_ruleviz_pattern_namedRule.graphml'), SAMPLE_GRAPHML, 'utf8');
     });
 
     teardown(async () => {
@@ -235,7 +247,7 @@ suite('PlotPanel', () => {
         assert.strictEqual(networkMessage.regulatoryRuleBnglByLabel.namedRule, 'namedRule: B() -> C() k2');
     });
 
-    test('reports standalone RuleViz (Operation) metadata for operation GraphML', async function () {
+    test('reports standalone RuleViz metadata for operation GraphML', async function () {
         this.timeout(15_000);
 
         PlotPanel.create(
@@ -245,7 +257,7 @@ suite('PlotPanel', () => {
         );
 
         const panelWrapper = PlotPanel.currentPanels.get(rulevizOperationGraphmlPath) as any;
-        assert.ok(panelWrapper, 'expected a PlotPanel instance for the RuleViz (Operation) GraphML file');
+        assert.ok(panelWrapper, 'expected a PlotPanel instance for the RuleViz GraphML file');
 
         const panel = panelWrapper._panel as vscode.WebviewPanel;
         const postedMessages: any[] = [];
@@ -267,7 +279,7 @@ suite('PlotPanel', () => {
         assert.strictEqual(networkMessage.standaloneGraphPaletteKind, 'ruleviz_operation');
     });
 
-    test('bundles standalone split RuleViz (Operation) outputs into an ordered browser payload', async function () {
+    test('bundles standalone split RuleViz operation outputs into an ordered browser payload', async function () {
         this.timeout(15_000);
 
         PlotPanel.create(
@@ -277,7 +289,7 @@ suite('PlotPanel', () => {
         );
 
         const panelWrapper = Array.from(PlotPanel.currentPanels.values())[0] as any;
-        assert.ok(panelWrapper, 'expected a PlotPanel instance for the split RuleViz (Operation) GraphML files');
+        assert.ok(panelWrapper, 'expected a PlotPanel instance for the split RuleViz GraphML files');
 
         const panel = panelWrapper._panel as vscode.WebviewPanel;
         const postedMessages: any[] = [];
@@ -295,14 +307,57 @@ suite('PlotPanel', () => {
 
         const browserMessage = postedMessages.find((message) => message.command === 'ruleviz-browser');
         assert.ok(browserMessage, 'expected a standalone RuleViz browser payload to be posted to the webview');
-        assert.strictEqual(browserMessage.graphKind, 'ruleviz_operation');
-        assert.strictEqual(browserMessage.standaloneGraphPaletteKind, 'ruleviz_operation');
-        assert.strictEqual(browserMessage.rows.length, 3);
-        assert.strictEqual(browserMessage.rows[0].displayLabel, '_R1');
-        assert.strictEqual(browserMessage.rows[0].bnglText, 'A() <-> B() kf, kr');
-        assert.strictEqual(browserMessage.rows[1].displayLabel, '_reverse__R1');
-        assert.strictEqual(browserMessage.rows[1].bnglText, 'A() <-> B() kf, kr');
-        assert.strictEqual(browserMessage.rows[2].displayLabel, 'namedRule');
-        assert.strictEqual(browserMessage.rows[2].bnglText, 'namedRule: B() -> C() k2');
+        assert.strictEqual(browserMessage.graphKind, 'ruleviz');
+        assert.strictEqual(browserMessage.standaloneGraphPaletteKind, 'ruleviz');
+        assert.strictEqual(browserMessage.initialView, 'operation');
+        assert.strictEqual(browserMessage.views.operation.rows.length, 3);
+        assert.strictEqual(browserMessage.views.operation.rows[0].displayLabel, '_R1');
+        assert.strictEqual(browserMessage.views.operation.rows[0].bnglText, 'A() <-> B() kf, kr');
+        assert.strictEqual(browserMessage.views.operation.rows[1].displayLabel, '_reverse__R1');
+        assert.strictEqual(browserMessage.views.operation.rows[1].bnglText, 'A() <-> B() kf, kr');
+        assert.strictEqual(browserMessage.views.operation.rows[2].displayLabel, 'namedRule');
+        assert.strictEqual(browserMessage.views.operation.rows[2].bnglText, 'namedRule: B() -> C() k2');
+        assert.strictEqual(browserMessage.views.pattern, undefined);
+    });
+
+    test('bundles standalone RuleViz operation and pattern outputs into a dual-view browser payload', async function () {
+        this.timeout(15_000);
+
+        PlotPanel.create(
+            vscode.extensions.getExtension('als251.bngl')!.extensionUri,
+            vscode.Uri.file(splitDualRulevizPatternGraphmlPath),
+            vscode.ViewColumn.One
+        );
+
+        const panelWrapper = Array.from(PlotPanel.currentPanels.values())[0] as any;
+        assert.ok(panelWrapper, 'expected a PlotPanel instance for the split RuleViz pattern GraphML files');
+
+        const panel = panelWrapper._panel as vscode.WebviewPanel;
+        const postedMessages: any[] = [];
+        const originalPostMessage = panel.webview.postMessage.bind(panel.webview);
+        panel.webview.postMessage = ((message: any) => {
+            postedMessages.push(message);
+            return Promise.resolve(true);
+        }) as typeof panel.webview.postMessage;
+
+        try {
+            await panelWrapper._send_figure_data();
+        } finally {
+            panel.webview.postMessage = originalPostMessage;
+        }
+
+        const browserMessage = postedMessages.find((message) => message.command === 'ruleviz-browser');
+        assert.ok(browserMessage, 'expected a dual-view standalone RuleViz browser payload to be posted to the webview');
+        assert.strictEqual(browserMessage.graphKind, 'ruleviz');
+        assert.strictEqual(browserMessage.standaloneGraphPaletteKind, 'ruleviz');
+        assert.strictEqual(browserMessage.initialView, 'pattern');
+        assert.strictEqual(browserMessage.views.operation.rows.length, 3);
+        assert.strictEqual(browserMessage.views.pattern.rows.length, 3);
+        assert.strictEqual(browserMessage.views.pattern.rows[0].displayLabel, '_R1');
+        assert.strictEqual(browserMessage.views.pattern.rows[0].bnglText, 'A() <-> B() kf, kr');
+        assert.strictEqual(browserMessage.views.pattern.rows[1].displayLabel, '_reverse__R1');
+        assert.strictEqual(browserMessage.views.pattern.rows[1].bnglText, 'A() <-> B() kf, kr');
+        assert.strictEqual(browserMessage.views.pattern.rows[2].displayLabel, 'namedRule');
+        assert.strictEqual(browserMessage.views.pattern.rows[2].bnglText, 'namedRule: B() -> C() k2');
     });
 });

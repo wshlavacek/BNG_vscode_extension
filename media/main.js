@@ -193,6 +193,10 @@
         return graphKind === 'regulatory' && standaloneGraphPaletteKind === 'regulatory';
     }
 
+    function isStandaloneRulevizViewer() {
+        return graphKind === 'ruleviz' && standaloneGraphPaletteKind === 'ruleviz';
+    }
+
     function isStandaloneRulevizOperationViewer() {
         return graphKind === 'ruleviz_operation' && standaloneGraphPaletteKind === 'ruleviz_operation';
     }
@@ -228,7 +232,7 @@
             return 28;
         }
 
-        if (isStandaloneRulevizOperationViewer()) {
+        if (isStandaloneRulevizViewer()) {
             return 36;
         }
 
@@ -919,11 +923,13 @@
         return normalizedLabel === '+' || normalizedLabel === '?';
     }
 
-    function getRulevizBrowserNodeKind(sourceColor, shape, parentId, parentNodeKind, labelText) {
+    function getRulevizBrowserNodeKind(sourceColor, shape, parentId, parentNodeKind, labelText, options = {}) {
         const normalizedColor = normalizeColorKey(sourceColor);
         const normalizedShape = (shape || '').toLowerCase();
+        const normalizedLabel = (labelText || '').trim();
+        const viewName = options.viewName || 'operation';
 
-        if (isRulevizBrowserWildcardBondModifierLabel(labelText)) {
+        if (isRulevizBrowserWildcardBondModifierLabel(normalizedLabel)) {
             return 'modifier';
         }
 
@@ -935,11 +941,15 @@
             return 'state';
         }
 
+        if (viewName === 'pattern' && !parentId && normalizedShape === 'roundrectangle' && normalizedLabel.length === 0) {
+            return 'patternGroup';
+        }
+
         if (normalizedShape === 'roundrectangle') {
             return 'rule';
         }
 
-        if (!parentId || parentNodeKind === 'rule') {
+        if (!parentId || parentNodeKind === 'rule' || parentNodeKind === 'patternGroup') {
             return 'molecule';
         }
 
@@ -956,6 +966,7 @@
 
     function getRulevizBrowserNodeShape(nodeKind) {
         switch (nodeKind) {
+            case 'patternGroup':
             case 'molecule':
             case 'component':
             case 'rule':
@@ -972,6 +983,11 @@
         const textLength = Math.max((labelText || '').trim().length, 1);
 
         switch (nodeKind) {
+            case 'patternGroup':
+                return {
+                    width: clampNumber((textLength * 8) + 168, 220, 360),
+                    height: 156
+                };
             case 'molecule':
                 return hasDirectChildren
                     ? {
@@ -1197,6 +1213,10 @@
             return 0;
         }
 
+        if (nodeKind === 'patternGroup') {
+            return 24;
+        }
+
         if (nodeKind === 'rule') {
             return 34;
         }
@@ -1220,6 +1240,8 @@
 
         const palette = getRulevizBrowserPalette();
         switch (nodeKind) {
+            case 'patternGroup':
+                return palette.canvasBackground;
             case 'rule':
                 return palette.ruleFill;
             case 'operation':
@@ -1239,6 +1261,8 @@
 
         const palette = getRulevizBrowserPalette();
         switch (nodeKind) {
+            case 'patternGroup':
+                return palette.canvasBorder;
             case 'rule':
                 return palette.ruleBorder;
             case 'operation':
@@ -1258,6 +1282,8 @@
 
         const palette = getRulevizBrowserPalette();
         switch (nodeKind) {
+            case 'patternGroup':
+                return palette.labelForeground;
             case 'rule':
                 return palette.ruleLabel;
             case 'operation':
@@ -1291,14 +1317,107 @@
         rulevizBrowser.style.background = palette.background;
     }
 
-    function destroyRulevizBrowser() {
-        if (currentRulevizBrowser && Array.isArray(currentRulevizBrowser.cards)) {
-            currentRulevizBrowser.cards.forEach((card) => {
-                if (card.cy) {
-                    card.cy.destroy();
+    function getRulevizBrowserViewState(viewName) {
+        if (!currentRulevizBrowser || !currentRulevizBrowser.views) {
+            return null;
+        }
+
+        return currentRulevizBrowser.views[viewName] || null;
+    }
+
+    function getAvailableRulevizBrowserViewNames() {
+        if (!currentRulevizBrowser || !currentRulevizBrowser.views) {
+            return [];
+        }
+
+        return Object.keys(currentRulevizBrowser.views).filter((viewName) => {
+            const viewState = currentRulevizBrowser.views[viewName];
+            return viewState
+                && Array.isArray(viewState.cards)
+                && viewState.cards.length > 0;
+        });
+    }
+
+    function getActiveRulevizBrowserViewState() {
+        if (!currentRulevizBrowser) {
+            return null;
+        }
+
+        const preferredViewName = currentRulevizBrowser.activeView;
+        const preferredViewState = getRulevizBrowserViewState(preferredViewName);
+        if (preferredViewState && Array.isArray(preferredViewState.cards) && preferredViewState.cards.length > 0) {
+            return preferredViewState;
+        }
+
+        const fallbackViewName = getAvailableRulevizBrowserViewNames()[0];
+        if (!fallbackViewName) {
+            return null;
+        }
+
+        currentRulevizBrowser.activeView = fallbackViewName;
+        return getRulevizBrowserViewState(fallbackViewName);
+    }
+
+    function getActiveRulevizBrowserCards() {
+        const viewState = getActiveRulevizBrowserViewState();
+        return viewState && Array.isArray(viewState.cards) ? viewState.cards : [];
+    }
+
+    function forEachRulevizBrowserCard(callback) {
+        getAvailableRulevizBrowserViewNames().forEach((viewName) => {
+            const viewState = getRulevizBrowserViewState(viewName);
+            if (!viewState || !Array.isArray(viewState.cards)) {
+                return;
+            }
+
+            viewState.cards.forEach((card) => {
+                callback(card, viewState, viewName);
+            });
+        });
+    }
+
+    function scheduleRulevizBrowserViewportSync() {
+        if (!isStandaloneRulevizBrowserActive() || !currentRulevizBrowser) {
+            return;
+        }
+
+        if (currentRulevizBrowser.viewportSyncScheduled) {
+            return;
+        }
+
+        currentRulevizBrowser.viewportSyncScheduled = true;
+        requestAnimationFrame(() => {
+            if (!currentRulevizBrowser) {
+                return;
+            }
+
+            currentRulevizBrowser.viewportSyncScheduled = false;
+            if (!isStandaloneRulevizBrowserActive()) {
+                return;
+            }
+
+            getActiveRulevizBrowserCards().forEach((card) => {
+                if (card && card.cy) {
+                    card.cy.resize();
                 }
             });
+        });
+    }
+
+    function destroyRulevizBrowser() {
+        if (currentRulevizBrowser && currentRulevizBrowser.scrollHandler && rulevizBrowser) {
+            rulevizBrowser.removeEventListener('scroll', currentRulevizBrowser.scrollHandler);
         }
+
+        if (currentRulevizBrowser && currentRulevizBrowser.resizeHandler) {
+            window.removeEventListener('resize', currentRulevizBrowser.resizeHandler);
+        }
+
+        forEachRulevizBrowserCard((card) => {
+            if (card.cy) {
+                card.cy.destroy();
+            }
+        });
 
         currentRulevizBrowser = null;
 
@@ -1319,6 +1438,7 @@
         const exportPngButton = document.getElementById('png_button');
         const exportGraphmlButton = document.getElementById('graphml_button');
         const toggleRuleBnglButton = document.getElementById('toggle_rule_bngl_button');
+        const toggleRulevizViewButton = document.getElementById('toggle_ruleviz_view_button');
         const presetOption = layoutSelect ? layoutSelect.querySelector('option[value="preset"]') : null;
 
         if (exportPngButton) {
@@ -1334,6 +1454,13 @@
         if (toggleRuleBnglButton) {
             toggleRuleBnglButton.hidden = isActive;
             toggleRuleBnglButton.disabled = isActive;
+        }
+
+        if (toggleRulevizViewButton && !isActive) {
+            toggleRulevizViewButton.hidden = true;
+            toggleRulevizViewButton.disabled = true;
+            toggleRulevizViewButton.textContent = 'Show Pattern';
+            toggleRulevizViewButton.title = '';
         }
 
         if (layoutSelect) {
@@ -1355,7 +1482,7 @@
         const animate = options.animate !== false;
         const padding = getGraphFitPadding();
 
-        currentRulevizBrowser.cards.forEach((card) => {
+        getActiveRulevizBrowserCards().forEach((card) => {
             if (!card || !card.cy) {
                 return;
             }
@@ -1386,20 +1513,8 @@
             return;
         }
 
-        currentRulevizBrowser.cards.forEach((card) => {
-            if (!card || !card.cy) {
-                return;
-            }
-
-            card.cy.batch(() => {
-                card.cy.nodes().forEach((node) => {
-                    if (graphLayoutLocked) {
-                        node.lock();
-                    } else {
-                        node.unlock();
-                    }
-                });
-            });
+        getActiveRulevizBrowserCards().forEach((card) => {
+            applyRulevizBrowserCardInteractivity(card);
         });
     }
 
@@ -1543,6 +1658,16 @@
         return normalizedName.replace(/\.graphml$/i, '') + '_layout';
     }
 
+    function getRulevizBrowserPngExportTitle() {
+        const activeViewState = getActiveRulevizBrowserViewState();
+        if (!activeViewState || !activeViewState.viewName) {
+            return page_title;
+        }
+
+        const normalizedTitle = page_title.replace(/_ruleviz_(operation|pattern)$/i, '_ruleviz');
+        return `${normalizedTitle}_${activeViewState.viewName}`;
+    }
+
     function findGraphmlGeometryContainerForExport(graphNode) {
         const searchRoots = Array.from(graphNode.children || []).filter((child) => child.tagName === 'data');
         const roots = searchRoots.length !== 0 ? searchRoots : [graphNode];
@@ -1643,7 +1768,8 @@
     }
 
     async function exportRulevizBrowserPng() {
-        if (!isStandaloneRulevizBrowserActive() || !rulevizBrowser || !currentRulevizBrowser || !Array.isArray(currentRulevizBrowser.cards)) {
+        const cards = getActiveRulevizBrowserCards();
+        if (!isStandaloneRulevizBrowserActive() || !rulevizBrowser || cards.length === 0) {
             return;
         }
 
@@ -1662,7 +1788,7 @@
         ctx.fillStyle = browserStyle.backgroundColor || getRulevizBrowserPalette().background;
         ctx.fillRect(0, 0, browserWidth, browserHeight);
 
-        const cardsWithImages = await Promise.all(currentRulevizBrowser.cards.map(async (card) => {
+        const cardsWithImages = await Promise.all(cards.map(async (card) => {
             const shellStyle = card.shell ? window.getComputedStyle(card.shell) : null;
             const imageUri = card.cy
                 ? card.cy.png({
@@ -1782,18 +1908,19 @@
         vscode.postMessage({
             command: 'image',
             type: 'png',
-            title: page_title,
+            title: getRulevizBrowserPngExportTitle(),
             folder: page_folder,
             text: canvas.toDataURL('image/png')
         });
     }
 
     function exportRulevizBrowserGraphml() {
-        if (!isStandaloneRulevizBrowserActive() || !currentRulevizBrowser || !Array.isArray(currentRulevizBrowser.cards)) {
+        const cards = getActiveRulevizBrowserCards();
+        if (!isStandaloneRulevizBrowserActive() || cards.length === 0) {
             return;
         }
 
-        const files = currentRulevizBrowser.cards.map((card, index) => {
+        const files = cards.map((card, index) => {
             const text = serializeRulevizBrowserCardGraphml(card);
             if (!text) {
                 return null;
@@ -1816,7 +1943,7 @@
         });
     }
 
-    function parseRulevizBrowserGraphml(graphmlText) {
+    function parseRulevizBrowserGraphml(graphmlText, options = {}) {
         const xmlParser = new DOMParser();
         const xmlDoc = xmlParser.parseFromString(graphmlText, 'text/xml');
         const cytoElements = {
@@ -1825,6 +1952,7 @@
         };
         const nodeKindsById = {};
         let nodeCount = 0;
+        let nodeOrderCounter = 0;
 
         function addRulevizNode(node, parentId, parentNodeKind) {
             const nodeId = node.getAttribute('id');
@@ -1855,7 +1983,16 @@
             labelFontSize = Number.isFinite(labelFontSize) && labelFontSize > 0 ? labelFontSize : 12;
 
             const hasDirectChildren = getDirectChildNodeElements(node).length > 0;
-            const nodeKind = getRulevizBrowserNodeKind(backgroundColor, shape, parentId, parentNodeKind, labelText);
+            const nodeKind = getRulevizBrowserNodeKind(
+                backgroundColor,
+                shape,
+                parentId,
+                parentNodeKind,
+                labelText,
+                {
+                    viewName: options.viewName
+                }
+            );
             const dimensions = getRulevizBrowserNodeDimensions(nodeKind, labelText, hasDirectChildren);
             const labelValign = getRulevizBrowserNodeLabelValign(nodeKind);
             const labelHalign = getRulevizBrowserNodeLabelHalign(nodeKind);
@@ -1910,11 +2047,13 @@
                     compoundPadding: compoundPadding,
                     minCompoundWidth: hasDirectChildren ? dimensions.width : 0,
                     minCompoundHeight: hasDirectChildren ? dimensions.height : 0,
-                    minZoomedFontSize: getRulevizBrowserMinZoomedFontSize(nodeKind)
+                    minZoomedFontSize: getRulevizBrowserMinZoomedFontSize(nodeKind),
+                    nodeOrder: nodeOrderCounter
                 }
             });
             nodeKindsById[nodeId] = nodeKind;
             nodeCount += 1;
+            nodeOrderCounter += 1;
 
             if (node.getAttribute('yfiles.foldertype') === 'group' && hasDirectChildren) {
                 addRulevizChildNodes(node, nodeId, nodeKind);
@@ -2027,44 +2166,51 @@
         ];
     }
 
-    function createRulevizBrowserLayoutOptions(layoutName) {
+    function createRulevizBrowserLayoutOptions(layoutName, options = {}) {
+        const fit = options.fit !== false;
+        const padding = Number.isFinite(options.padding) ? options.padding : 22;
+        let layoutOptions;
+
         switch (layoutName) {
             case 'grid':
-                return {
+                layoutOptions = {
                     name: 'grid',
-                    fit: true,
-                    padding: 22,
+                    fit: fit,
+                    padding: padding,
                     avoidOverlap: true,
                     avoidOverlapPadding: 22,
                     nodeDimensionsIncludeLabels: true,
                     animate: false
                 };
+                break;
             case 'circle':
-                return {
+                layoutOptions = {
                     name: 'circle',
-                    fit: true,
-                    padding: 22,
+                    fit: fit,
+                    padding: padding,
                     avoidOverlap: true,
                     nodeDimensionsIncludeLabels: true,
                     spacingFactor: 1.12,
                     animate: false
                 };
+                break;
             case 'concentric':
-                return {
+                layoutOptions = {
                     name: 'concentric',
-                    fit: true,
-                    padding: 22,
+                    fit: fit,
+                    padding: padding,
                     avoidOverlap: true,
                     nodeDimensionsIncludeLabels: true,
                     minNodeSpacing: 54,
                     spacingFactor: 1.1,
                     animate: false
                 };
+                break;
             case 'cose':
-                return {
+                layoutOptions = {
                     name: 'cose',
-                    fit: true,
-                    padding: 22,
+                    fit: fit,
+                    padding: padding,
                     animate: false,
                     nodeDimensionsIncludeLabels: true,
                     componentSpacing: 92,
@@ -2078,19 +2224,46 @@
                     coolingFactor: 0.96,
                     minTemp: 1
                 };
+                break;
             case 'breadthfirst':
             default:
-                return {
+                layoutOptions = {
                     name: 'breadthfirst',
-                    fit: true,
-                    padding: 22,
+                    fit: fit,
+                    padding: padding,
                     directed: true,
                     animate: false,
                     avoidOverlap: true,
                     nodeDimensionsIncludeLabels: true,
                     spacingFactor: 1.16
                 };
+                break;
         }
+
+        if (layoutOptions.name === 'breadthfirst') {
+            if (options.rotateHorizontal) {
+                layoutOptions.transform = (_node, position) => {
+                    return {
+                        x: position.y,
+                        y: position.x
+                    };
+                };
+            }
+
+            if (options.roots && options.roots.length > 0) {
+                layoutOptions.roots = options.roots;
+            }
+        }
+
+        if (Number.isFinite(options.spacingFactor)) {
+            layoutOptions.spacingFactor = options.spacingFactor;
+        }
+
+        if (Number.isFinite(options.avoidOverlapPadding)) {
+            layoutOptions.avoidOverlapPadding = options.avoidOverlapPadding;
+        }
+
+        return layoutOptions;
     }
 
     function applyRulevizBrowserTheme() {
@@ -2101,7 +2274,7 @@
         applyRulevizBrowserContainerTheme();
         const palette = getRulevizBrowserPalette();
 
-        currentRulevizBrowser.cards.forEach((card) => {
+        forEachRulevizBrowserCard((card) => {
             if (!card || !card.cy) {
                 return;
             }
@@ -2155,6 +2328,389 @@
         updateRegulatoryRuleBnglButton(false);
     }
 
+    function getRulevizBrowserPackingConfig(nodeKind, childCount) {
+        const contactMapNodeKind = getRulevizBrowserContactMapNodeKind(nodeKind);
+        if (contactMapNodeKind) {
+            return getContactMapPackingConfig(contactMapNodeKind, childCount);
+        }
+
+        switch (nodeKind) {
+            case 'patternGroup':
+                return {
+                    gapX: 18,
+                    gapY: 14,
+                    targetAspect: childCount > 3 ? 1.18 : 1.42
+                };
+            case 'rule':
+                return {
+                    gapX: 18,
+                    gapY: 14,
+                    targetAspect: 1.35
+                };
+            default:
+                return {
+                    gapX: 14,
+                    gapY: 10,
+                    targetAspect: 1.4
+                };
+        }
+    }
+
+    function packRulevizBrowserChildren(parentNode) {
+        if (!parentNode.isParent()) {
+            return false;
+        }
+
+        const visibleChildren = parentNode.children(':visible').toArray().sort(compareNodeOrder);
+        if (visibleChildren.length === 0) {
+            return false;
+        }
+
+        const config = getRulevizBrowserPackingConfig(parentNode.data('nodeKind'), visibleChildren.length);
+        const items = visibleChildren.map((childNode) => {
+            const size = getNodeLayoutSize(childNode);
+            return {
+                node: childNode,
+                width: size.width,
+                height: size.height
+            };
+        });
+        const positions = buildPackedPositions(items, config);
+        let moved = false;
+
+        positions.forEach((item) => {
+            const currentPosition = item.node.position();
+            if (Math.abs(currentPosition.x - item.x) > 0.5 || Math.abs(currentPosition.y - item.y) > 0.5) {
+                item.node.position({
+                    x: item.x,
+                    y: item.y
+                });
+                moved = true;
+            }
+        });
+
+        return moved;
+    }
+
+    function getRulevizBrowserPatternTopLevelNodes(cy, options = {}) {
+        if (!cy) {
+            return [];
+        }
+
+        const nodes = options.visibleOnly === false ? cy.nodes() : cy.nodes(':visible');
+        return nodes.filter((node) => {
+            return node.parent().length === 0;
+        }).toArray().sort(compareNodeOrder);
+    }
+
+    function getRulevizBrowserPatternTopLevelEdges(cy, topLevelNodes, options = {}) {
+        if (!cy || !Array.isArray(topLevelNodes) || topLevelNodes.length === 0) {
+            return [];
+        }
+
+        const topLevelNodeIds = new Set(topLevelNodes.map((node) => node.id()));
+        const edges = options.visibleOnly === false ? cy.edges() : cy.edges(':visible');
+        return edges.filter((edge) => {
+            return topLevelNodeIds.has(edge.source().id()) && topLevelNodeIds.has(edge.target().id());
+        }).toArray();
+    }
+
+    function packRulevizBrowserPatternCompounds(cy) {
+        if (!cy) {
+            return false;
+        }
+
+        const topLevelNodes = getRulevizBrowserPatternTopLevelNodes(cy, { visibleOnly: true });
+        if (topLevelNodes.length === 0) {
+            return false;
+        }
+
+        const anchorPositions = new Map();
+        topLevelNodes.forEach((node) => {
+            anchorPositions.set(node.id(), {
+                x: node.position('x'),
+                y: node.position('y')
+            });
+        });
+
+        const compoundNodes = cy.nodes(':visible').filter((node) => node.isParent()).toArray().sort((left, right) => {
+            const depthDifference = right.parents().length - left.parents().length;
+            if (depthDifference !== 0) {
+                return depthDifference;
+            }
+
+            return compareNodeOrder(left, right);
+        });
+        let moved = false;
+
+        cy.batch(() => {
+            compoundNodes.forEach((compoundNode) => {
+                moved = packRulevizBrowserChildren(compoundNode) || moved;
+            });
+
+            anchorPositions.forEach((anchorPosition, nodeId) => {
+                const topLevelNode = cy.getElementById(nodeId);
+                if (!topLevelNode || topLevelNode.length === 0 || !topLevelNode.visible()) {
+                    return;
+                }
+
+                const currentPosition = topLevelNode.position();
+                const deltaX = anchorPosition.x - currentPosition.x;
+                const deltaY = anchorPosition.y - currentPosition.y;
+                if (Math.abs(deltaX) > 0.5 || Math.abs(deltaY) > 0.5) {
+                    topLevelNode.shift({
+                        x: deltaX,
+                        y: deltaY
+                    });
+                    moved = true;
+                }
+            });
+        });
+
+        return moved;
+    }
+
+    function getRulevizBrowserPatternRootNodes(cy, topLevelNodes, topLevelEdges) {
+        const incomingCounts = new Map();
+        const outgoingCounts = new Map();
+
+        topLevelNodes.forEach((node) => {
+            incomingCounts.set(node.id(), 0);
+            outgoingCounts.set(node.id(), 0);
+        });
+
+        topLevelEdges.forEach((edge) => {
+            incomingCounts.set(edge.target().id(), (incomingCounts.get(edge.target().id()) || 0) + 1);
+            outgoingCounts.set(edge.source().id(), (outgoingCounts.get(edge.source().id()) || 0) + 1);
+        });
+
+        const roots = topLevelNodes.filter((node) => {
+            return (incomingCounts.get(node.id()) || 0) === 0;
+        });
+        if (roots.length > 0) {
+            return cy.collection(roots);
+        }
+
+        const nonRuleNodes = topLevelNodes.filter((node) => node.data('nodeKind') !== 'rule');
+        if (nonRuleNodes.length > 0) {
+            return cy.collection(nonRuleNodes);
+        }
+
+        return cy.collection(topLevelNodes);
+    }
+
+    function getRulevizBrowserPatternTopLevelRanks(cy, topLevelNodes, topLevelEdges) {
+        const nodeById = new Map();
+        const incomingCounts = new Map();
+        const outgoingIdsBySource = new Map();
+        const incomingIdsByTarget = new Map();
+        const rankById = new Map();
+
+        topLevelNodes.forEach((node) => {
+            nodeById.set(node.id(), node);
+            incomingCounts.set(node.id(), 0);
+            outgoingIdsBySource.set(node.id(), []);
+            incomingIdsByTarget.set(node.id(), []);
+            rankById.set(node.id(), 0);
+        });
+
+        topLevelEdges.forEach((edge) => {
+            const sourceId = edge.source().id();
+            const targetId = edge.target().id();
+            if (!nodeById.has(sourceId) || !nodeById.has(targetId)) {
+                return;
+            }
+
+            incomingCounts.set(targetId, (incomingCounts.get(targetId) || 0) + 1);
+            outgoingIdsBySource.get(sourceId).push(targetId);
+            incomingIdsByTarget.get(targetId).push(sourceId);
+        });
+
+        outgoingIdsBySource.forEach((targetIds) => {
+            targetIds.sort((leftId, rightId) => compareNodeOrder(nodeById.get(leftId), nodeById.get(rightId)));
+        });
+
+        const queue = getRulevizBrowserPatternRootNodes(cy, topLevelNodes, topLevelEdges).toArray().sort(compareNodeOrder);
+        const visitedNodeIds = new Set();
+
+        while (queue.length > 0) {
+            const node = queue.shift();
+            if (!node) {
+                continue;
+            }
+
+            const nodeId = node.id();
+            if (visitedNodeIds.has(nodeId)) {
+                continue;
+            }
+
+            visitedNodeIds.add(nodeId);
+            const sourceRank = rankById.get(nodeId) || 0;
+            const outgoingIds = outgoingIdsBySource.get(nodeId) || [];
+            outgoingIds.forEach((targetId) => {
+                rankById.set(targetId, Math.max(rankById.get(targetId) || 0, sourceRank + 1));
+                incomingCounts.set(targetId, Math.max(0, (incomingCounts.get(targetId) || 0) - 1));
+                if ((incomingCounts.get(targetId) || 0) === 0) {
+                    queue.push(nodeById.get(targetId));
+                }
+            });
+
+            queue.sort(compareNodeOrder);
+        }
+
+        if (visitedNodeIds.size !== topLevelNodes.length) {
+            const fallbackRuleRank = topLevelNodes.some((node) => node.data('nodeKind') === 'rule') ? 1 : 0;
+            topLevelNodes.forEach((node) => {
+                if (visitedNodeIds.has(node.id())) {
+                    return;
+                }
+
+                const hasIncoming = (incomingIdsByTarget.get(node.id()) || []).length > 0;
+                const hasOutgoing = (outgoingIdsBySource.get(node.id()) || []).length > 0;
+                if (node.data('nodeKind') === 'rule') {
+                    rankById.set(node.id(), fallbackRuleRank);
+                    return;
+                }
+
+                rankById.set(node.id(), hasIncoming && !hasOutgoing ? fallbackRuleRank + 1 : 0);
+            });
+        }
+
+        return rankById;
+    }
+
+    function applyRulevizBrowserPatternBreadthfirstLayout(cy, topLevelNodes, topLevelEdges) {
+        const rankById = getRulevizBrowserPatternTopLevelRanks(cy, topLevelNodes, topLevelEdges);
+        const nodesByRank = new Map();
+
+        topLevelNodes.forEach((node) => {
+            const rank = rankById.get(node.id()) || 0;
+            if (!nodesByRank.has(rank)) {
+                nodesByRank.set(rank, []);
+            }
+
+            nodesByRank.get(rank).push(node);
+        });
+
+        const ranks = Array.from(nodesByRank.keys()).sort((left, right) => left - right);
+        const columnGap = 80;
+        const rowGap = 34;
+        const columnWidths = new Map();
+
+        ranks.forEach((rank) => {
+            const columnWidth = nodesByRank.get(rank).reduce((maxWidth, node) => {
+                return Math.max(maxWidth, getNodeLayoutSize(node).width);
+            }, 0);
+            columnWidths.set(rank, columnWidth);
+        });
+
+        const totalWidth = ranks.reduce((width, rank, index) => {
+            return width + (columnWidths.get(rank) || 0) + (index > 0 ? columnGap : 0);
+        }, 0);
+        let cursorX = -totalWidth / 2;
+
+        cy.batch(() => {
+            ranks.forEach((rank) => {
+                const columnNodes = nodesByRank.get(rank).slice().sort((left, right) => {
+                    const leftKind = left.data('nodeKind');
+                    const rightKind = right.data('nodeKind');
+                    if (leftKind === 'rule' && rightKind !== 'rule') {
+                        return 1;
+                    }
+
+                    if (leftKind !== 'rule' && rightKind === 'rule') {
+                        return -1;
+                    }
+
+                    return compareNodeOrder(left, right);
+                });
+                const sizedNodes = columnNodes.map((node) => {
+                    return {
+                        node: node,
+                        size: getNodeLayoutSize(node)
+                    };
+                });
+                const totalHeight = sizedNodes.reduce((height, item, index) => {
+                    return height + item.size.height + (index > 0 ? rowGap : 0);
+                }, 0);
+                let cursorY = -totalHeight / 2;
+                const centerX = cursorX + ((columnWidths.get(rank) || 0) / 2);
+
+                sizedNodes.forEach((item) => {
+                    const currentPosition = item.node.position();
+                    const targetPosition = {
+                        x: centerX,
+                        y: cursorY + (item.size.height / 2)
+                    };
+                    const deltaX = targetPosition.x - currentPosition.x;
+                    const deltaY = targetPosition.y - currentPosition.y;
+
+                    if (Math.abs(deltaX) > 0.5 || Math.abs(deltaY) > 0.5) {
+                        item.node.shift({
+                            x: deltaX,
+                            y: deltaY
+                        });
+                    }
+
+                    cursorY += item.size.height + rowGap;
+                });
+
+                cursorX += (columnWidths.get(rank) || 0) + columnGap;
+            });
+        });
+
+        cy.fit(cy.elements(':visible'), getGraphFitPadding());
+    }
+
+    function applyRulevizBrowserPatternCardLayout(card, layoutName) {
+        if (!card || !card.cy) {
+            return;
+        }
+
+        const cy = card.cy;
+        cy.resize();
+        packRulevizBrowserPatternCompounds(cy);
+
+        const topLevelNodes = getRulevizBrowserPatternTopLevelNodes(cy, { visibleOnly: true });
+        if (topLevelNodes.length === 0) {
+            return;
+        }
+
+        const topLevelEdges = getRulevizBrowserPatternTopLevelEdges(cy, topLevelNodes, { visibleOnly: true });
+        let layoutElements = cy.collection(topLevelNodes);
+        if (topLevelEdges.length > 0) {
+            layoutElements = layoutElements.union(cy.collection(topLevelEdges));
+        }
+
+        if (layoutName === 'breadthfirst') {
+            applyRulevizBrowserPatternBreadthfirstLayout(cy, topLevelNodes, topLevelEdges);
+            return;
+        }
+
+        const layoutOptions = createRulevizBrowserLayoutOptions(layoutName);
+        const layout = layoutElements.layout(layoutOptions);
+        layout.run();
+    }
+
+    function applyRulevizBrowserCardInteractivity(card) {
+        if (!card || !card.cy) {
+            return;
+        }
+
+        card.cy.batch(() => {
+            card.cy.nodes().forEach((node) => {
+                if (graphLayoutLocked) {
+                    node.ungrabify();
+                    node.lock();
+                    return;
+                }
+
+                node.unlock();
+                node.grabify();
+            });
+        });
+    }
+
     function applyRulevizBrowserLayout(layoutName, options = {}) {
         if (!isStandaloneRulevizBrowserActive()) {
             return;
@@ -2178,8 +2734,13 @@
             layoutSelect.value = normalizedLayoutName;
         }
 
-        currentRulevizBrowser.cards.forEach((card) => {
+        forEachRulevizBrowserCard((card) => {
             if (!card || !card.cy) {
+                return;
+            }
+
+            if (card.viewName === 'pattern') {
+                applyRulevizBrowserPatternCardLayout(card, normalizedLayoutName);
                 return;
             }
 
@@ -2189,13 +2750,7 @@
         });
     }
 
-    function renderRulevizBrowser(rows) {
-        destroyRulevizBrowser();
-
-        if (!rulevizBrowser || !network) {
-            return;
-        }
-
+    function createRulevizBrowserViewState(viewName, rows) {
         const safeRows = Array.isArray(rows)
             ? rows.filter((row) => {
                 return row
@@ -2206,86 +2761,210 @@
             })
             : [];
 
+        if (safeRows.length === 0) {
+            return null;
+        }
+
+        const viewElement = document.createElement('section');
+        viewElement.className = 'ruleviz-browser-view';
+        viewElement.dataset.rulevizView = viewName;
+
+        const table = document.createElement('section');
+        table.className = 'ruleviz-browser-table';
+        viewElement.appendChild(table);
+
+        const cards = [];
+
+        safeRows.forEach((row) => {
+            const parsedGraph = parseRulevizBrowserGraphml(row.graphmlText, {
+                viewName: viewName
+            });
+
+            const rowElement = document.createElement('article');
+            rowElement.className = 'ruleviz-browser-row';
+
+            const metaElement = document.createElement('div');
+            metaElement.className = 'ruleviz-browser-meta';
+
+            const labelElement = document.createElement('div');
+            labelElement.className = 'ruleviz-browser-rule-label';
+            labelElement.textContent = row.displayLabel;
+            metaElement.appendChild(labelElement);
+
+            const graphCell = document.createElement('div');
+            graphCell.className = 'ruleviz-browser-graph-cell';
+
+            const graphShell = document.createElement('div');
+            graphShell.className = 'ruleviz-browser-graph-shell';
+            graphShell.style.height = `${getRulevizBrowserGraphHeight(parsedGraph.nodeCount)}px`;
+
+            const graphContainer = document.createElement('div');
+            graphContainer.className = 'ruleviz-browser-graph';
+            graphShell.appendChild(graphContainer);
+            graphCell.appendChild(graphShell);
+
+            rowElement.appendChild(metaElement);
+            rowElement.appendChild(graphCell);
+
+            let bnglElement = null;
+            if (row.bnglText) {
+                bnglElement = document.createElement('pre');
+                bnglElement.className = 'ruleviz-browser-rule-bngl';
+                bnglElement.textContent = row.bnglText;
+                rowElement.appendChild(bnglElement);
+            }
+
+            table.appendChild(rowElement);
+
+            const cy = cytoscape({
+                container: graphContainer,
+                elements: parsedGraph.elements,
+                style: createRulevizBrowserStylesheet(),
+                layout: {
+                    name: 'preset',
+                    fit: false
+                }
+            });
+
+            cards.push({
+                cy: cy,
+                shell: graphShell,
+                row: row,
+                viewName: viewName,
+                rowElement: rowElement,
+                labelElement: labelElement,
+                graphContainer: graphContainer,
+                bnglElement: bnglElement
+            });
+        });
+
+        return {
+            viewName: viewName,
+            rows: safeRows,
+            cards: cards,
+            viewElement: viewElement
+        };
+    }
+
+    function updateRulevizViewButton() {
+        const toggleRulevizViewButton = document.getElementById('toggle_ruleviz_view_button');
+        if (!toggleRulevizViewButton) {
+            return;
+        }
+
+        const availableViewNames = getAvailableRulevizBrowserViewNames();
+        const activeViewState = getActiveRulevizBrowserViewState();
+        const isAvailable = isStandaloneRulevizBrowserActive() && Boolean(activeViewState) && availableViewNames.length > 1;
+
+        toggleRulevizViewButton.hidden = !isAvailable;
+        toggleRulevizViewButton.disabled = !isAvailable;
+
+        if (!isAvailable || !activeViewState) {
+            toggleRulevizViewButton.textContent = 'Show Pattern';
+            toggleRulevizViewButton.title = '';
+            delete toggleRulevizViewButton.dataset.targetRulevizView;
+            return;
+        }
+
+        const nextViewName = availableViewNames.find((viewName) => viewName !== activeViewState.viewName) || activeViewState.viewName;
+        const label = nextViewName === 'pattern' ? 'Show Pattern' : 'Show Operation';
+        toggleRulevizViewButton.textContent = label;
+        toggleRulevizViewButton.setAttribute('aria-label', label);
+        toggleRulevizViewButton.title = nextViewName === 'pattern'
+            ? 'Switch the standalone RuleViz browser to pattern view.'
+            : 'Switch the standalone RuleViz browser to operation view.';
+        toggleRulevizViewButton.dataset.targetRulevizView = nextViewName;
+    }
+
+    function setRulevizBrowserActiveView(viewName, options = {}) {
+        if (!isStandaloneRulevizBrowserActive()) {
+            return;
+        }
+
+        const availableViewNames = getAvailableRulevizBrowserViewNames();
+        if (availableViewNames.length === 0) {
+            updateRulevizViewButton();
+            return;
+        }
+
+        const normalizedViewName = availableViewNames.includes(viewName)
+            ? viewName
+            : availableViewNames[0];
+
+        currentRulevizBrowser.activeView = normalizedViewName;
+
+        availableViewNames.forEach((name) => {
+            const viewState = getRulevizBrowserViewState(name);
+            if (!viewState || !viewState.viewElement) {
+                return;
+            }
+
+            viewState.viewElement.hidden = name !== normalizedViewName;
+        });
+
+        getActiveRulevizBrowserCards().forEach((card) => {
+            if (card && card.cy) {
+                card.cy.resize();
+            }
+        });
+
+        applyRulevizBrowserLayout(currentGraphLayoutName, { persist: false });
+        applyRulevizBrowserLayoutLock();
+
+        updateRulevizViewButton();
+
+        if (options.fit) {
+            applyRulevizBrowserFit({
+                animate: options.animate !== false
+            });
+        }
+    }
+
+    function renderRulevizBrowser(views, initialView) {
+        destroyRulevizBrowser();
+
+        if (!rulevizBrowser || !network) {
+            return;
+        }
+
+        const operationRows = views && views.operation && Array.isArray(views.operation.rows)
+            ? views.operation.rows
+            : [];
+        const patternRows = views && views.pattern && Array.isArray(views.pattern.rows)
+            ? views.pattern.rows
+            : [];
+
         network.hidden = true;
         rulevizBrowser.hidden = false;
         rulevizBrowser.innerHTML = '';
 
-        const table = document.createElement('section');
-        table.className = 'ruleviz-browser-table';
-        rulevizBrowser.appendChild(table);
+        const operationViewState = createRulevizBrowserViewState('operation', operationRows);
+        const patternViewState = createRulevizBrowserViewState('pattern', patternRows);
 
-        const cards = [];
-
-        if (safeRows.length === 0) {
+        if (!operationViewState && !patternViewState) {
             const emptyState = document.createElement('div');
             emptyState.className = 'ruleviz-browser-empty';
             emptyState.textContent = 'No standalone RuleViz rows were available for this results folder.';
-            table.appendChild(emptyState);
+            rulevizBrowser.appendChild(emptyState);
         } else {
-            safeRows.forEach((row) => {
-                const parsedGraph = parseRulevizBrowserGraphml(row.graphmlText);
-
-                const rowElement = document.createElement('article');
-                rowElement.className = 'ruleviz-browser-row';
-
-                const metaElement = document.createElement('div');
-                metaElement.className = 'ruleviz-browser-meta';
-
-                const labelElement = document.createElement('div');
-                labelElement.className = 'ruleviz-browser-rule-label';
-                labelElement.textContent = row.displayLabel;
-                metaElement.appendChild(labelElement);
-
-                const graphCell = document.createElement('div');
-                graphCell.className = 'ruleviz-browser-graph-cell';
-
-                const graphShell = document.createElement('div');
-                graphShell.className = 'ruleviz-browser-graph-shell';
-                graphShell.style.height = `${getRulevizBrowserGraphHeight(parsedGraph.nodeCount)}px`;
-
-                const graphContainer = document.createElement('div');
-                graphContainer.className = 'ruleviz-browser-graph';
-                graphShell.appendChild(graphContainer);
-                graphCell.appendChild(graphShell);
-
-                rowElement.appendChild(metaElement);
-                rowElement.appendChild(graphCell);
-
-                let bnglElement = null;
-                if (row.bnglText) {
-                    bnglElement = document.createElement('pre');
-                    bnglElement.className = 'ruleviz-browser-rule-bngl';
-                    bnglElement.textContent = row.bnglText;
-                    rowElement.appendChild(bnglElement);
+            [operationViewState, patternViewState].forEach((viewState) => {
+                if (!viewState) {
+                    return;
                 }
 
-                table.appendChild(rowElement);
-
-                const cy = cytoscape({
-                    container: graphContainer,
-                    elements: parsedGraph.elements,
-                    style: createRulevizBrowserStylesheet(),
-                    layout: {
-                        name: 'preset',
-                        fit: false
-                    }
-                });
-
-                cards.push({
-                    cy: cy,
-                    shell: graphShell,
-                    row: row,
-                    rowElement: rowElement,
-                    labelElement: labelElement,
-                    graphContainer: graphContainer,
-                    bnglElement: bnglElement
-                });
+                rulevizBrowser.appendChild(viewState.viewElement);
             });
         }
 
         currentRulevizBrowser = {
-            cards: cards,
-            showRuleBnglAvailable: safeRows.some((row) => typeof row.bnglText === 'string' && row.bnglText.trim().length > 0),
+            activeView: initialView === 'pattern' ? 'pattern' : 'operation',
+            views: {
+                operation: operationViewState,
+                pattern: patternViewState
+            },
+            showRuleBnglAvailable: [operationViewState, patternViewState].some((viewState) => {
+                return viewState && viewState.rows.some((row) => typeof row.bnglText === 'string' && row.bnglText.trim().length > 0);
+            }),
             defaultLayoutName: 'breadthfirst',
             layoutFactories: {
                 breadthfirst: true,
@@ -2293,12 +2972,25 @@
                 circle: true,
                 concentric: true,
                 cose: true
+            },
+            viewportSyncScheduled: false,
+            scrollHandler: () => {
+                scheduleRulevizBrowserViewportSync();
+            },
+            resizeHandler: () => {
+                scheduleRulevizBrowserViewportSync();
             }
         };
+
+        rulevizBrowser.addEventListener('scroll', currentRulevizBrowser.scrollHandler, {
+            passive: true
+        });
+        window.addEventListener('resize', currentRulevizBrowser.resizeHandler);
 
         configureToolbarForRulevizBrowser(true);
         applyRulevizBrowserTheme();
         applyRulevizBrowserBnglVisibility();
+        setRulevizBrowserActiveView(currentRulevizBrowser.activeView, { fit: false });
     }
 
     function updateComponentsButton() {
@@ -4236,30 +4928,32 @@
                 break;
             case 'ruleviz-browser':
                 const persistedRulevizBrowserViewState = resolveInitialGraphViewState();
-                graphKind = typeof message.graphKind === 'string' ? message.graphKind : 'ruleviz_operation';
+                graphKind = typeof message.graphKind === 'string' ? message.graphKind : 'ruleviz';
                 graphHasComponents = false;
                 graphHasInternalStates = false;
-                standaloneGraphPaletteKind = message.standaloneGraphPaletteKind === 'ruleviz_operation'
-                    ? 'ruleviz_operation'
+                standaloneGraphPaletteKind = message.standaloneGraphPaletteKind === 'ruleviz'
+                    ? 'ruleviz'
                     : null;
                 showComponents = true;
                 showInternalStates = true;
                 showRegulatoryRuleBngl = persistedRulevizBrowserViewState.showRegulatoryRuleBngl;
                 currentGraphLayoutName = persistedRulevizBrowserViewState.layoutName || 'breadthfirst';
                 graphLayoutLocked = persistedRulevizBrowserViewState.layoutLocked;
+                const requestedInitialRulevizView = message.initialView === 'pattern' ? 'pattern' : 'operation';
 
                 if (currentCy) {
                     currentCy.destroy();
                     currentCy = null;
                 }
 
-                renderRulevizBrowser(message.rows);
+                renderRulevizBrowser(message.views, requestedInitialRulevizView);
 
                 const rulevizLayoutSelect = document.getElementById('layout_select');
                 const rulevizLayoutLockButton = document.getElementById('layout_lock_button');
                 const rulevizFitButton = document.getElementById('fit_button');
                 const rulevizExportPngButton = document.getElementById('png_button');
                 const rulevizExportGraphmlButton = document.getElementById('graphml_button');
+                const rulevizViewToggleButton = document.getElementById('toggle_ruleviz_view_button');
 
                 if (rulevizLayoutSelect) {
                     rulevizLayoutSelect.onchange = function () {
@@ -4300,9 +4994,24 @@
                     };
                 }
 
+                if (rulevizViewToggleButton) {
+                    rulevizViewToggleButton.onclick = function () {
+                        const targetView = rulevizViewToggleButton.dataset.targetRulevizView;
+                        if (!targetView) {
+                            return;
+                        }
+
+                        setRulevizBrowserActiveView(targetView, {
+                            fit: true,
+                            animate: true
+                        });
+                    };
+                }
+
                 updateComponentsButton();
                 updateInternalStatesButton();
                 updateLayoutLockButton(rulevizLayoutSelect);
+                updateRulevizViewButton();
                 applyStandaloneGraphCanvasTheme();
 
                 requestAnimationFrame(() => {

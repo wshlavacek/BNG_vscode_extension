@@ -10,6 +10,7 @@ suite('Command Registration', () => {
         'bng.run_bngl',
         'bng.run_contactmap',
         'bng.run_regulatory',
+        'bng.run_ruleviz',
         'bng.run_ruleviz_operation',
         'bng.run_viz',
         'bng.results_folder',

@@ -13,6 +13,7 @@ import {
     resolveResultsBaseFolderPath,
     shouldUseStandaloneContactMapPalette,
     shouldUseStandaloneRegulatoryPalette,
+    shouldUseStandaloneRulevizLayout,
     shouldUseStandaloneRulevizOperationLayout,
 } from '../../resultsFolders';
 
@@ -83,6 +84,37 @@ suite('Results Folders', () => {
         );
         assert.strictEqual(
             shouldUseStandaloneRulevizOperationLayout(filePath, ['nfkb.bngl', 'nfkb_ruleviz_operation.graphml', 'nfkb_contactmap.graphml']),
+            false
+        );
+    });
+
+    test('detects standalone RuleViz when operation and pattern outputs share the same folder', () => {
+        const operationPath = path.join('/tmp', 'results_nfkb', '2026_05_18__12_34_56', 'nfkb_ruleviz_operation__R1.graphml');
+        const patternPath = path.join('/tmp', 'results_nfkb', '2026_05_18__12_34_56', 'nfkb_ruleviz_pattern__R1.graphml');
+
+        assert.strictEqual(
+            shouldUseStandaloneRulevizLayout(operationPath, [
+                'nfkb.bngl',
+                'nfkb_ruleviz_operation__R1.graphml',
+                'nfkb_ruleviz_pattern__R1.graphml'
+            ]),
+            true
+        );
+        assert.strictEqual(
+            shouldUseStandaloneRulevizLayout(patternPath, [
+                'nfkb.bngl',
+                'nfkb_ruleviz_operation__R1.graphml',
+                'nfkb_ruleviz_pattern__R1.graphml'
+            ]),
+            true
+        );
+        assert.strictEqual(
+            shouldUseStandaloneRulevizLayout(operationPath, [
+                'nfkb.bngl',
+                'nfkb_ruleviz_operation__R1.graphml',
+                'nfkb_ruleviz_pattern__R1.graphml',
+                'nfkb_contactmap.graphml'
+            ]),
             false
         );
     });

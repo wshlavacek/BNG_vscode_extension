@@ -134,6 +134,26 @@ export function shouldUseStandaloneRegulatoryPalette(filePath: string, siblingNa
     return getStandaloneGraphPaletteKind(filePath, siblingNames) === 'regulatory';
 }
 
+export function shouldUseStandaloneRulevizLayout(filePath: string, siblingNames: readonly string[]): boolean {
+    const currentFileName = path.basename(filePath);
+    const currentKind = getGraphmlVisualizationKind(currentFileName);
+
+    if (currentKind !== 'ruleviz_operation' && currentKind !== 'ruleviz_pattern') {
+        return false;
+    }
+
+    return !siblingNames.some((name) => {
+        if (name === currentFileName) {
+            return false;
+        }
+
+        const siblingKind = getGraphmlVisualizationKind(name);
+        return siblingKind !== 'other'
+            && siblingKind !== 'ruleviz_operation'
+            && siblingKind !== 'ruleviz_pattern';
+    });
+}
+
 export function shouldUseStandaloneRulevizOperationLayout(filePath: string, siblingNames: readonly string[]): boolean {
-    return getStandaloneGraphPaletteKind(filePath, siblingNames) === 'ruleviz_operation';
+    return shouldUseStandaloneRulevizLayout(filePath, siblingNames);
 }

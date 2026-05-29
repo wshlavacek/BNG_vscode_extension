@@ -22,7 +22,7 @@ export interface CommandContext {
     extensionContext: vscode.ExtensionContext;
 }
 
-export type VisualizationType = 'all' | 'contactmap' | 'regulatory' | 'ruleviz_operation';
+export type VisualizationType = 'all' | 'contactmap' | 'regulatory' | 'ruleviz' | 'ruleviz_operation';
 
 interface ResultsFolderMenuItem extends vscode.QuickPickItem {
     action: 'default' | 'workspace' | 'choose';
@@ -33,6 +33,7 @@ const PYBIONETGEN_PACKAGE = 'bionetgen';
 const PYBIONETGEN_SETUPTOOLS_COMPAT_SPEC = 'setuptools<82';
 const PYBIONETGEN_COMPATIBILITY_CHECK = 'import pkg_resources; import bionetgen';
 const STANDALONE_REGULATORY_VISUALIZE_ACTION = 'visualize({type=>"regulatory",ruleNames=>1})';
+const STANDALONE_RULEVIZ_PATTERN_VISUALIZE_ACTION = 'visualize({type=>"ruleviz_pattern",each=>1})';
 const STANDALONE_RULEVIZ_OPERATION_VISUALIZE_ACTION = 'visualize({type=>"ruleviz_operation",each=>1})';
 
 function getTimestampedFolderName(): string {
@@ -159,8 +160,8 @@ function getVisualizationCommandLabel(visualizationType: VisualizationType): str
         return 'regulatory graph';
     }
 
-    if (visualizationType === 'ruleviz_operation') {
-        return 'RuleViz (Operation)';
+    if (visualizationType === 'ruleviz' || visualizationType === 'ruleviz_operation') {
+        return 'RuleViz';
     }
 
     return 'visualization graphs';
@@ -240,14 +241,23 @@ function getVisualizationOutputMatcher(visualizationType: VisualizationType) {
         return (name: string) => name.toLowerCase().endsWith('_ruleviz_operation.graphml') || name.toLowerCase().includes('ruleviz_operation');
     }
 
+    if (visualizationType === 'ruleviz') {
+        return (name: string) => {
+            const normalizedName = name.toLowerCase();
+            return normalizedName.endsWith('.graphml')
+                && (normalizedName.includes('ruleviz_operation') || normalizedName.includes('ruleviz_pattern'));
+        };
+    }
+
     return (name: string) => name.toLowerCase().endsWith('.graphml');
 }
 
-function createStandaloneVisualizationInputText(sourceText: string, visualizeAction: string): string {
+function createStandaloneVisualizationInputText(sourceText: string, visualizeAction: string | readonly string[]): string {
     const document = parseBnglDocument(sourceText);
     const lineEnding = sourceText.includes('\r\n') ? '\r\n' : '\n';
     const lines = sourceText.split(/\r?\n/);
     const skippedLines = new Set<number>();
+    const visualizeActions = Array.isArray(visualizeAction) ? Array.from(visualizeAction) : [visualizeAction];
 
     for (const block of document.blocks) {
         if (block.type !== 'actions' && block.type !== 'protocol') {
@@ -273,7 +283,7 @@ function createStandaloneVisualizationInputText(sourceText: string, visualizeAct
         keptLines.push('');
     }
 
-    keptLines.push(visualizeAction, '');
+    keptLines.push(...visualizeActions, '');
     return keptLines.join(lineEnding);
 }
 
@@ -283,6 +293,13 @@ export function createStandaloneRegulatoryInputText(sourceText: string): string 
 
 export function createStandaloneRulevizOperationInputText(sourceText: string): string {
     return createStandaloneVisualizationInputText(sourceText, STANDALONE_RULEVIZ_OPERATION_VISUALIZE_ACTION);
+}
+
+export function createStandaloneRulevizInputText(sourceText: string): string {
+    return createStandaloneVisualizationInputText(sourceText, [
+        STANDALONE_RULEVIZ_PATTERN_VISUALIZE_ACTION,
+        STANDALONE_RULEVIZ_OPERATION_VISUALIZE_ACTION
+    ]);
 }
 
 async function openVisualizationOutputs(
@@ -303,8 +320,11 @@ async function openVisualizationOutputs(
         return;
     }
 
-    if (visualizationType === 'ruleviz_operation') {
-        const graphmlUri = vscode.Uri.joinPath(folderUri, matches[0]);
+    if (visualizationType === 'ruleviz_operation' || visualizationType === 'ruleviz') {
+        const preferredFileName = visualizationType === 'ruleviz'
+            ? matches.find((name) => name.toLowerCase().includes('ruleviz_operation')) ?? matches[0]
+            : matches[0];
+        const graphmlUri = vscode.Uri.joinPath(folderUri, preferredFileName);
         PlotPanel.create(extensionContext.extensionUri, graphmlUri, targetColumn);
         return;
     }
@@ -329,19 +349,19 @@ function createVisualizationHandler(ctx: CommandContext, visualizationType: Visu
         const copy_path = vscode.Uri.joinPath(new_fold_uri, fname);
 
         await vscode.workspace.fs.createDirectory(new_fold_uri);
-        if (visualizationType === 'regulatory' || visualizationType === 'ruleviz_operation') {
+        if (visualizationType === 'regulatory' || visualizationType === 'ruleviz' || visualizationType === 'ruleviz_operation') {
             const sourceBytes = await vscode.workspace.fs.readFile(editor.document.uri);
             const sourceText = Buffer.from(sourceBytes).toString('utf8');
             const standaloneVisualizationInputText = visualizationType === 'regulatory'
                 ? createStandaloneRegulatoryInputText(sourceText)
-                : createStandaloneRulevizOperationInputText(sourceText);
+                : createStandaloneRulevizInputText(sourceText);
             await vscode.workspace.fs.writeFile(copy_path, Buffer.from(standaloneVisualizationInputText, 'utf8'));
         } else {
             await vscode.workspace.fs.copy(editor.document.uri, copy_path);
         }
 
         const pythonCommand = await getPythonCommand(ctx.channel);
-        const vizCommand = visualizationType === 'regulatory' || visualizationType === 'ruleviz_operation'
+        const vizCommand = visualizationType === 'regulatory' || visualizationType === 'ruleviz' || visualizationType === 'ruleviz_operation'
             ? createBionetgenCommand(pythonCommand, ctx.pybngVersion, [
                 'run',
                 '-i',
@@ -464,8 +484,12 @@ export function createRegulatoryGraphHandler(ctx: CommandContext) {
     return createVisualizationHandler(ctx, 'regulatory');
 }
 
+export function createRulevizHandler(ctx: CommandContext) {
+    return createVisualizationHandler(ctx, 'ruleviz');
+}
+
 export function createRulevizOperationHandler(ctx: CommandContext) {
-    return createVisualizationHandler(ctx, 'ruleviz_operation');
+    return createRulevizHandler(ctx);
 }
 
 export function createResultsFolderHandler(ctx: CommandContext) {

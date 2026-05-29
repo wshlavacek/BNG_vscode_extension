@@ -124,8 +124,8 @@
                 "title": "BNG: Visualize Regulatory Graph"
             },
             {
-                "command": "bng.run_ruleviz_operation",
-                "title": "BNG: Visualize RuleViz (Operation)"
+                "command": "bng.run_ruleviz",
+                "title": "BNG: Visualize RuleViz"
             },
             {
                 "command": "bng.run_viz",

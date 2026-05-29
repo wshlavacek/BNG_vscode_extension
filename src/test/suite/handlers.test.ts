@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { createStandaloneRegulatoryInputText, createStandaloneRulevizOperationInputText } from '../../commands/handlers';
+import { createStandaloneRegulatoryInputText, createStandaloneRulevizInputText, createStandaloneRulevizOperationInputText } from '../../commands/handlers';
 
 suite('Visualization Handlers', () => {
     test('replaces top-level actions with a standalone regulatory ruleNames action', () => {
@@ -63,5 +63,28 @@ suite('Visualization Handlers', () => {
         assert.strictEqual(result.includes('simulate({method=>"ssa"})'), false);
         assert.strictEqual(result.includes('visualize({type=>"ruleviz_operation"})'), false);
         assert.match(result, /visualize\(\{type=>"ruleviz_operation",each=>1\}\)\n$/);
+    });
+
+    test('appends both standalone RuleViz views for the unified RuleViz feature', () => {
+        const source = [
+            'begin model',
+            'begin parameters',
+            '  k 1',
+            'end parameters',
+            'end model',
+            '',
+            'simulate({method=>"ssa"})',
+            'visualize({type=>"ruleviz_operation"})',
+            ''
+        ].join('\n');
+
+        const result = createStandaloneRulevizInputText(source);
+
+        assert.strictEqual(result.includes('simulate({method=>"ssa"})'), false);
+        assert.strictEqual(result.includes('visualize({type=>"ruleviz_operation"})'), false);
+        assert.match(
+            result,
+            /visualize\(\{type=>"ruleviz_pattern",each=>1\}\)\nvisualize\(\{type=>"ruleviz_operation",each=>1\}\)\n$/
+        );
     });
 });
