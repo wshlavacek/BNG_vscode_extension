@@ -590,6 +590,27 @@ export class PlotPanel {
 
     private _save_graphml_export(message: any) {
         const folder = vscode.Uri.file(message.folder);
+        const files = Array.isArray(message.files)
+            ? message.files
+                .filter((file: any) => typeof file?.title === 'string' && typeof file?.text === 'string')
+                .map((file: any) => ({
+                    uri: vscode.Uri.joinPath(folder, `${file.title}.graphml`),
+                    data: Buffer.from(file.text, 'utf8')
+                }))
+            : null;
+
+        if (files && files.length > 0) {
+            Promise.all(files.map((file: { uri: vscode.Uri, data: Buffer }) => vscode.workspace.fs.writeFile(file.uri, file.data))).then(() => {
+                const messageText = files.length === 1
+                    ? `GraphML saved to ${files[0].uri.fsPath}`
+                    : `${files.length} GraphML files saved to ${folder.fsPath}`;
+                vscode.window.showInformationMessage(messageText);
+            }, (err) => {
+                vscode.window.showErrorMessage(`Failed to save GraphML: ${err.message}`);
+            });
+            return;
+        }
+
         const uri = vscode.Uri.joinPath(folder, `${message.title}.graphml`);
         const data = Buffer.from(message.text, 'utf8');
 

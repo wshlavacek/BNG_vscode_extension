@@ -1322,11 +1322,13 @@
         const presetOption = layoutSelect ? layoutSelect.querySelector('option[value="preset"]') : null;
 
         if (exportPngButton) {
-            exportPngButton.hidden = isActive;
+            exportPngButton.hidden = false;
+            exportPngButton.disabled = false;
         }
 
         if (exportGraphmlButton) {
-            exportGraphmlButton.hidden = isActive;
+            exportGraphmlButton.hidden = false;
+            exportGraphmlButton.disabled = false;
         }
 
         if (toggleRuleBnglButton) {
@@ -1398,6 +1400,419 @@
                     }
                 });
             });
+        });
+    }
+
+    function getElementRectWithinContainer(element, container) {
+        const elementRect = element.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+
+        return {
+            x: elementRect.left - containerRect.left + container.scrollLeft,
+            y: elementRect.top - containerRect.top + container.scrollTop,
+            width: elementRect.width,
+            height: elementRect.height
+        };
+    }
+
+    function drawRoundedRectPath(ctx, x, y, width, height, radius) {
+        const clampedRadius = Math.max(0, Math.min(radius, width / 2, height / 2));
+        ctx.beginPath();
+        ctx.moveTo(x + clampedRadius, y);
+        ctx.lineTo(x + width - clampedRadius, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + clampedRadius);
+        ctx.lineTo(x + width, y + height - clampedRadius);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - clampedRadius, y + height);
+        ctx.lineTo(x + clampedRadius, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - clampedRadius);
+        ctx.lineTo(x, y + clampedRadius);
+        ctx.quadraticCurveTo(x, y, x + clampedRadius, y);
+        ctx.closePath();
+    }
+
+    function fillAndStrokeRoundedRect(ctx, x, y, width, height, radius, fillStyle, strokeStyle, lineWidth) {
+        drawRoundedRectPath(ctx, x, y, width, height, radius);
+        if (fillStyle) {
+            ctx.fillStyle = fillStyle;
+            ctx.fill();
+        }
+        if (strokeStyle && lineWidth > 0) {
+            ctx.lineWidth = lineWidth;
+            ctx.strokeStyle = strokeStyle;
+            ctx.stroke();
+        }
+    }
+
+    function setCanvasFontFromStyle(ctx, style) {
+        const fontStyle = style.fontStyle && style.fontStyle !== 'normal' ? `${style.fontStyle} ` : '';
+        const fontVariant = style.fontVariant && style.fontVariant !== 'normal' ? `${style.fontVariant} ` : '';
+        const fontWeight = style.fontWeight ? `${style.fontWeight} ` : '';
+        const fontSize = style.fontSize || '14px';
+        const fontFamily = style.fontFamily || 'sans-serif';
+        ctx.font = `${fontStyle}${fontVariant}${fontWeight}${fontSize} ${fontFamily}`;
+    }
+
+    function breakCanvasTextToken(ctx, token, maxWidth) {
+        if (!token) {
+            return [''];
+        }
+
+        const segments = [];
+        let current = '';
+
+        Array.from(token).forEach((character) => {
+            const candidate = current + character;
+            if (!current || ctx.measureText(candidate).width <= maxWidth) {
+                current = candidate;
+                return;
+            }
+
+            segments.push(current);
+            current = character;
+        });
+
+        if (current) {
+            segments.push(current);
+        }
+
+        return segments;
+    }
+
+    function wrapCanvasText(ctx, text, maxWidth) {
+        const normalizedText = String(text || '');
+        const paragraphs = normalizedText.split(/\r?\n/);
+        const lines = [];
+
+        paragraphs.forEach((paragraph) => {
+            if (paragraph.length === 0) {
+                lines.push('');
+                return;
+            }
+
+            const tokens = paragraph.split(/(\s+)/).filter((token) => token.length > 0);
+            let currentLine = '';
+
+            tokens.forEach((token) => {
+                const candidate = currentLine ? `${currentLine}${token}` : token;
+                if (!currentLine || ctx.measureText(candidate).width <= maxWidth) {
+                    currentLine = candidate;
+                    return;
+                }
+
+                if (currentLine.trim().length > 0) {
+                    lines.push(currentLine.trimEnd());
+                    currentLine = token.trimStart();
+                } else {
+                    currentLine = token;
+                }
+
+                if (ctx.measureText(currentLine).width <= maxWidth) {
+                    return;
+                }
+
+                const brokenSegments = breakCanvasTextToken(ctx, currentLine, maxWidth);
+                currentLine = brokenSegments.pop() || '';
+                lines.push(...brokenSegments);
+            });
+
+            if (currentLine.length > 0) {
+                lines.push(currentLine.trimEnd());
+            }
+        });
+
+        return lines;
+    }
+
+    function loadImageFromUri(uri) {
+        return new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = function () {
+                resolve(image);
+            };
+            image.onerror = function () {
+                reject(new Error('Failed to load image data for export.'));
+            };
+            image.src = uri;
+        });
+    }
+
+    function createRulevizBrowserExportFileTitle(fileName, index) {
+        const normalizedName = typeof fileName === 'string' && fileName.trim().length > 0
+            ? fileName.trim()
+            : `${page_title}_${index + 1}`;
+        return normalizedName.replace(/\.graphml$/i, '') + '_layout';
+    }
+
+    function findGraphmlGeometryContainerForExport(graphNode) {
+        const searchRoots = Array.from(graphNode.children || []).filter((child) => child.tagName === 'data');
+        const roots = searchRoots.length !== 0 ? searchRoots : [graphNode];
+
+        for (const root of roots) {
+            const descendants = Array.from(root.getElementsByTagName('*'));
+            const preferredContainer = descendants.find((element) => {
+                return element.tagName === 'y:ShapeNode'
+                    || element.tagName === 'y:GenericNode'
+                    || element.tagName === 'y:GroupNode';
+            });
+
+            if (preferredContainer) {
+                return preferredContainer;
+            }
+
+            const fallbackContainer = descendants.find((element) => element.tagName.startsWith('y:'));
+            if (fallbackContainer) {
+                return fallbackContainer;
+            }
+        }
+
+        return null;
+    }
+
+    function getRulevizBrowserNodeGeometryForGraphmlExport(node) {
+        const storedWidth = node.isParent()
+            ? (
+                Number(node.data('layoutFootprintWidth'))
+                || Number(node.data('minCompoundWidth'))
+                || Number(node.data('width'))
+            )
+            : Number(node.data('width'));
+        const storedHeight = node.isParent()
+            ? (
+                Number(node.data('layoutFootprintHeight'))
+                || Number(node.data('minCompoundHeight'))
+                || Number(node.data('height'))
+            )
+            : Number(node.data('height'));
+        const width = storedWidth > 0
+            ? storedWidth
+            : getNodeLayoutSize(node).width;
+        const height = storedHeight > 0
+            ? storedHeight
+            : getNodeLayoutSize(node).height;
+        const position = node.position();
+
+        return {
+            x: position.x - (width / 2),
+            y: position.y - (height / 2),
+            width: width,
+            height: height
+        };
+    }
+
+    function serializeRulevizBrowserCardGraphml(card) {
+        const graphmlText = card && card.row ? card.row.graphmlText : '';
+        if (typeof graphmlText !== 'string' || graphmlText.trim().length === 0 || !card.cy) {
+            return null;
+        }
+
+        const xmlParser = new DOMParser();
+        const exportDoc = xmlParser.parseFromString(graphmlText, 'text/xml');
+        const serializer = new XMLSerializer();
+        const yNamespace = exportDoc.lookupNamespaceURI('y') || 'http://www.yworks.com/xml/graphml';
+
+        Array.from(exportDoc.getElementsByTagName('node')).forEach((graphNode) => {
+            const nodeId = graphNode.getAttribute('id');
+            if (!nodeId) {
+                return;
+            }
+
+            const cyNode = card.cy.getElementById(nodeId);
+            if (!cyNode || cyNode.length === 0) {
+                return;
+            }
+
+            const geometry = getRulevizBrowserNodeGeometryForGraphmlExport(cyNode);
+            const geometryContainer = findGraphmlGeometryContainerForExport(graphNode);
+            if (!geometryContainer) {
+                return;
+            }
+
+            let geometryElement = geometryContainer.getElementsByTagName('y:Geometry').item(0);
+            if (!geometryElement) {
+                geometryElement = exportDoc.createElementNS(yNamespace, 'y:Geometry');
+                geometryContainer.insertBefore(geometryElement, geometryContainer.firstChild);
+            }
+
+            geometryElement.setAttribute('x', geometry.x.toFixed(2));
+            geometryElement.setAttribute('y', geometry.y.toFixed(2));
+            geometryElement.setAttribute('width', geometry.width.toFixed(2));
+            geometryElement.setAttribute('height', geometry.height.toFixed(2));
+        });
+
+        return serializer.serializeToString(exportDoc);
+    }
+
+    async function exportRulevizBrowserPng() {
+        if (!isStandaloneRulevizBrowserActive() || !rulevizBrowser || !currentRulevizBrowser || !Array.isArray(currentRulevizBrowser.cards)) {
+            return;
+        }
+
+        const browserWidth = Math.max(rulevizBrowser.scrollWidth, rulevizBrowser.clientWidth, 1);
+        const browserHeight = Math.max(rulevizBrowser.scrollHeight, rulevizBrowser.clientHeight, 1);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(browserWidth * graphPngExportScale));
+        canvas.height = Math.max(1, Math.round(browserHeight * graphPngExportScale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            throw new Error('Could not create canvas context for export.');
+        }
+
+        ctx.scale(graphPngExportScale, graphPngExportScale);
+        const browserStyle = window.getComputedStyle(rulevizBrowser);
+        ctx.fillStyle = browserStyle.backgroundColor || getRulevizBrowserPalette().background;
+        ctx.fillRect(0, 0, browserWidth, browserHeight);
+
+        const cardsWithImages = await Promise.all(currentRulevizBrowser.cards.map(async (card) => {
+            const shellStyle = card.shell ? window.getComputedStyle(card.shell) : null;
+            const imageUri = card.cy
+                ? card.cy.png({
+                    output: 'base64uri',
+                    bg: shellStyle ? shellStyle.backgroundColor : getRulevizBrowserPalette().canvasBackground,
+                    full: false,
+                    scale: graphPngExportScale
+                })
+                : null;
+            const image = imageUri ? await loadImageFromUri(imageUri) : null;
+            return {
+                card,
+                image
+            };
+        }));
+
+        cardsWithImages.forEach(({ card, image }, index) => {
+            if (!card.rowElement || !card.labelElement || !card.shell || !card.graphContainer) {
+                return;
+            }
+
+            const rowRect = getElementRectWithinContainer(card.rowElement, rulevizBrowser);
+            const labelRect = getElementRectWithinContainer(card.labelElement, rulevizBrowser);
+            const shellRect = getElementRectWithinContainer(card.shell, rulevizBrowser);
+            const graphRect = getElementRectWithinContainer(card.graphContainer, rulevizBrowser);
+
+            const rowStyle = window.getComputedStyle(card.rowElement);
+            const labelStyle = window.getComputedStyle(card.labelElement);
+            const shellStyle = window.getComputedStyle(card.shell);
+
+            fillAndStrokeRoundedRect(
+                ctx,
+                rowRect.x,
+                rowRect.y,
+                rowRect.width,
+                rowRect.height,
+                parseFloat(rowStyle.borderRadius) || 16,
+                rowStyle.backgroundColor,
+                rowStyle.borderColor,
+                parseFloat(rowStyle.borderWidth) || 1
+            );
+
+            setCanvasFontFromStyle(ctx, labelStyle);
+            ctx.fillStyle = labelStyle.color;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            const labelLineHeight = parseFloat(labelStyle.lineHeight) || (parseFloat(labelStyle.fontSize) * 1.25) || 18;
+            const labelLines = wrapCanvasText(ctx, card.labelElement.textContent || card.row.displayLabel || `Rule ${index + 1}`, Math.max(24, labelRect.width));
+            labelLines.forEach((line, lineIndex) => {
+                ctx.fillText(line, labelRect.x, labelRect.y + (lineIndex * labelLineHeight));
+            });
+
+            fillAndStrokeRoundedRect(
+                ctx,
+                shellRect.x,
+                shellRect.y,
+                shellRect.width,
+                shellRect.height,
+                parseFloat(shellStyle.borderRadius) || 14,
+                shellStyle.backgroundColor,
+                shellStyle.borderColor,
+                parseFloat(shellStyle.borderWidth) || 1
+            );
+
+            if (image) {
+                ctx.save();
+                drawRoundedRectPath(
+                    ctx,
+                    graphRect.x,
+                    graphRect.y,
+                    graphRect.width,
+                    graphRect.height,
+                    Math.max(0, (parseFloat(shellStyle.borderRadius) || 14) - 1)
+                );
+                ctx.clip();
+                ctx.drawImage(image, graphRect.x, graphRect.y, graphRect.width, graphRect.height);
+                ctx.restore();
+            }
+
+            if (card.bnglElement) {
+                const bnglRect = getElementRectWithinContainer(card.bnglElement, rulevizBrowser);
+                const bnglStyle = window.getComputedStyle(card.bnglElement);
+                fillAndStrokeRoundedRect(
+                    ctx,
+                    bnglRect.x,
+                    bnglRect.y,
+                    bnglRect.width,
+                    bnglRect.height,
+                    parseFloat(bnglStyle.borderRadius) || 12,
+                    bnglStyle.backgroundColor,
+                    bnglStyle.borderColor,
+                    parseFloat(bnglStyle.borderWidth) || 1
+                );
+
+                setCanvasFontFromStyle(ctx, bnglStyle);
+                ctx.fillStyle = bnglStyle.color;
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                const horizontalPadding = parseFloat(bnglStyle.paddingLeft) || 16;
+                const verticalPadding = parseFloat(bnglStyle.paddingTop) || 14;
+                const bnglLineHeight = parseFloat(bnglStyle.lineHeight) || (parseFloat(bnglStyle.fontSize) * 1.5) || 18;
+                const bnglLines = wrapCanvasText(
+                    ctx,
+                    card.bnglElement.textContent || card.row.bnglText || '',
+                    Math.max(24, bnglRect.width - (horizontalPadding * 2))
+                );
+                bnglLines.forEach((line, lineIndex) => {
+                    ctx.fillText(
+                        line,
+                        bnglRect.x + horizontalPadding,
+                        bnglRect.y + verticalPadding + (lineIndex * bnglLineHeight)
+                    );
+                });
+            }
+        });
+
+        vscode.postMessage({
+            command: 'image',
+            type: 'png',
+            title: page_title,
+            folder: page_folder,
+            text: canvas.toDataURL('image/png')
+        });
+    }
+
+    function exportRulevizBrowserGraphml() {
+        if (!isStandaloneRulevizBrowserActive() || !currentRulevizBrowser || !Array.isArray(currentRulevizBrowser.cards)) {
+            return;
+        }
+
+        const files = currentRulevizBrowser.cards.map((card, index) => {
+            const text = serializeRulevizBrowserCardGraphml(card);
+            if (!text) {
+                return null;
+            }
+
+            return {
+                title: createRulevizBrowserExportFileTitle(card.row && card.row.fileName, index),
+                text
+            };
+        }).filter((item) => item && typeof item.title === 'string' && typeof item.text === 'string');
+
+        if (files.length === 0) {
+            return;
+        }
+
+        vscode.postMessage({
+            command: 'graphml-export',
+            folder: page_folder,
+            files
         });
     }
 
@@ -1836,8 +2251,9 @@
                 rowElement.appendChild(metaElement);
                 rowElement.appendChild(graphCell);
 
+                let bnglElement = null;
                 if (row.bnglText) {
-                    const bnglElement = document.createElement('pre');
+                    bnglElement = document.createElement('pre');
                     bnglElement.className = 'ruleviz-browser-rule-bngl';
                     bnglElement.textContent = row.bnglText;
                     rowElement.appendChild(bnglElement);
@@ -1858,7 +2274,11 @@
                 cards.push({
                     cy: cy,
                     shell: graphShell,
-                    row: row
+                    row: row,
+                    rowElement: rowElement,
+                    labelElement: labelElement,
+                    graphContainer: graphContainer,
+                    bnglElement: bnglElement
                 });
             });
         }
@@ -3838,6 +4258,8 @@
                 const rulevizLayoutSelect = document.getElementById('layout_select');
                 const rulevizLayoutLockButton = document.getElementById('layout_lock_button');
                 const rulevizFitButton = document.getElementById('fit_button');
+                const rulevizExportPngButton = document.getElementById('png_button');
+                const rulevizExportGraphmlButton = document.getElementById('graphml_button');
 
                 if (rulevizLayoutSelect) {
                     rulevizLayoutSelect.onchange = function () {
@@ -3857,6 +4279,24 @@
                 if (rulevizFitButton) {
                     rulevizFitButton.onclick = function () {
                         applyRulevizBrowserFit({ animate: true });
+                    };
+                }
+
+                if (rulevizExportPngButton) {
+                    rulevizExportPngButton.onclick = function () {
+                        exportRulevizBrowserPng().catch((error) => {
+                            console.error(error);
+                            vscode.postMessage({
+                                command: 'alert',
+                                text: 'Failed to export the standalone RuleViz PNG.'
+                            });
+                        });
+                    };
+                }
+
+                if (rulevizExportGraphmlButton) {
+                    rulevizExportGraphmlButton.onclick = function () {
+                        exportRulevizBrowserGraphml();
                     };
                 }
 
