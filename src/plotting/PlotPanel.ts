@@ -26,8 +26,8 @@ function getCanonicalRulevizBrowserBaseName(filePath: string): string | undefine
     }
 
     const graphBaseName = path.basename(filePath, path.extname(filePath));
-    const match = graphBaseName.match(/^(.*_ruleviz_(?:operation|pattern))_.+$/i);
-    return match?.[1];
+    const match = graphBaseName.match(/^(.*)_ruleviz_(?:operation|pattern)_.+$/i);
+    return match ? `${match[1]}_ruleviz` : undefined;
 }
 
 function getCanonicalGraphmlBaseName(filePath: string): string {

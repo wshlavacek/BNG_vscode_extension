@@ -188,6 +188,30 @@ suite('PlotPanel', () => {
         assert.strictEqual(PlotPanel.currentPanels.size, 1, 'expected re-opening to reuse the existing panel');
     });
 
+    test('uses a unified RuleViz title for the standalone browser and reuses one panel across pattern and operation split files', async function () {
+        this.timeout(15_000);
+
+        PlotPanel.create(
+            vscode.extensions.getExtension('als251.bngl')!.extensionUri,
+            vscode.Uri.file(splitDualRulevizPatternGraphmlPath),
+            vscode.ViewColumn.One
+        );
+
+        const panelWrapper = Array.from(PlotPanel.currentPanels.values())[0] as any;
+        assert.ok(panelWrapper, 'expected a PlotPanel instance for the split RuleViz GraphML files');
+
+        const panel = panelWrapper._panel as vscode.WebviewPanel;
+        assert.strictEqual(panel.title, 'test_model_ruleviz');
+
+        PlotPanel.create(
+            vscode.extensions.getExtension('als251.bngl')!.extensionUri,
+            vscode.Uri.file(splitDualRulevizOperationGraphmlPath),
+            vscode.ViewColumn.One
+        );
+
+        assert.strictEqual(PlotPanel.currentPanels.size, 1, 'expected split RuleViz pattern and operation files to share one panel');
+    });
+
     test('can open a viewer for an explicit file without replacing the current model editor', async function () {
         this.timeout(15_000);
 
