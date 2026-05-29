@@ -43,6 +43,7 @@
         "ms-python.python"
     ],
     "activationEvents": [
+        "onCommand:bng.close_generated_artifacts",
         "onCommand:bng.results_folder",
         "onCommand:bng.manage_processes",
         "onCommand:bng.setup",
@@ -139,6 +140,10 @@
             {
                 "command": "bng.webview",
                 "title": "BNG: Open Plot / Viewer"
+            },
+            {
+                "command": "bng.close_generated_artifacts",
+                "title": "BNG: Close Generated Tabs"
             },
             {
                 "command": "bng.setup",

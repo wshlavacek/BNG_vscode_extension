@@ -333,6 +333,13 @@ export class PlotPanel {
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
     private _disposables: vscode.Disposable[] = [];
+    private _disposed = false;
+
+    public static disposeAll(): number {
+        const panels = Array.from(PlotPanel.currentPanels.values());
+        panels.forEach((panel) => panel.dispose());
+        return panels.length;
+    }
 
     public static disposeForFolder(folderPath: string) {
         const normalizedFolderPath = path.resolve(folderPath);
@@ -701,6 +708,11 @@ export class PlotPanel {
     }
 
     public dispose() {
+        if (this._disposed) {
+            return;
+        }
+
+        this._disposed = true;
         PlotPanel.currentPanels.delete(this._panelKey);
         this._panel.dispose();
         while (this._disposables.length) {

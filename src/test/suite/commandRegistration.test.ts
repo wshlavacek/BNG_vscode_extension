@@ -15,6 +15,7 @@ suite('Command Registration', () => {
         'bng.run_viz',
         'bng.results_folder',
         'bng.webview',
+        'bng.close_generated_artifacts',
         'bng.setup',
         'bng.upgrade',
         'bng.menu',

@@ -29,12 +29,18 @@ export async function menuCommandHandler() {
         );
     }
     items.push(
+        { label: '$(close-all) Close Generated Tabs', description: 'Close open plots, graph views, and generated artifact files', cmd: 'bng.close_generated_artifacts' },
         { label: '$(tools) Install', description: 'Check and install PyBioNetGen', cmd: 'bng.setup' },
         { label: '$(cloud-upload) Upgrade', description: 'Upgrade PyBioNetGen to latest version', cmd: 'bng.upgrade' },
     );
 
     const pick = await vscode.window.showQuickPick(items, { placeHolder: 'BioNetGen: Select an action' });
     if (pick) {
-        vscode.commands.executeCommand(pick.cmd);
+        try {
+            await vscode.commands.executeCommand(pick.cmd);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`BioNetGen command failed: ${message}`);
+        }
     }
 }

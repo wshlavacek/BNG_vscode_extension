@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { LanguageClient, LanguageClientOptions, ServerOptions, TransportKind } from 'vscode-languageclient/node';
 import { ProcessManager, ProcessManagerProvider, TrackedProcessObject } from './utils/processManagement';
+import { getGeneratedArtifactTabs } from './utils/generatedArtifacts';
 import { PlotPanel } from './plotting/PlotPanel';
 import { createRunHandler, createVizHandler, createContactMapHandler, createRegulatoryGraphHandler, createRulevizHandler, createRulevizOperationHandler, createResultsFolderHandler, createSetupHandler, createUpgradeHandler, CommandContext } from './commands/handlers';
 import { menuCommandHandler } from './commands/menu';
@@ -108,9 +109,42 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.commands.registerCommand('bng.run_regulatory', createRegulatoryGraphHandler(ctx)),
 			vscode.commands.registerCommand('bng.run_ruleviz', createRulevizHandler(ctx)),
 			vscode.commands.registerCommand('bng.run_ruleviz_operation', createRulevizOperationHandler(ctx)),
-			vscode.commands.registerCommand('bng.run_viz', createVizHandler(ctx)),
+		vscode.commands.registerCommand('bng.run_viz', createVizHandler(ctx)),
 		vscode.commands.registerCommand('bng.results_folder', createResultsFolderHandler(ctx)),
 		vscode.commands.registerCommand('bng.webview', () => PlotPanel.create(context.extensionUri)),
+		vscode.commands.registerCommand('bng.close_generated_artifacts', async () => {
+			const closedPanelCount = PlotPanel.disposeAll();
+			const artifactTabs = getGeneratedArtifactTabs(vscode.window.tabGroups.all);
+
+			if (closedPanelCount === 0 && artifactTabs.length === 0) {
+				vscode.window.showInformationMessage('No generated artifact tabs are open.');
+				return;
+			}
+
+			let closedArtifactTabCount = 0;
+			if (artifactTabs.length > 0) {
+				const closed = await vscode.window.tabGroups.close(artifactTabs, true);
+				if (!closed) {
+					const closedCount = closedPanelCount;
+					vscode.window.showInformationMessage(
+						closedCount > 0
+							? `Closed ${closedCount} generated artifact tab${closedCount === 1 ? '' : 's'}, but some file tabs could not be closed.`
+							: 'Could not close all generated artifact tabs.'
+					);
+					return;
+				}
+
+				closedArtifactTabCount = artifactTabs.length;
+			}
+
+			const closedCount = closedPanelCount + closedArtifactTabCount;
+			if (closedCount === 0) {
+				vscode.window.showInformationMessage('No generated artifact tabs are open.');
+				return;
+			}
+
+			vscode.window.showInformationMessage(`Closed ${closedCount} generated artifact tab${closedCount === 1 ? '' : 's'}.`);
+		}),
 		vscode.commands.registerCommand('bng.setup', createSetupHandler(ctx)),
 		vscode.commands.registerCommand('bng.upgrade', createUpgradeHandler(ctx)),
 		vscode.commands.registerCommand('bng.process_cleanup', () => processManager.killAllProcesses()),
