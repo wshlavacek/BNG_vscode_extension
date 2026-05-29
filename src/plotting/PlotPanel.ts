@@ -54,10 +54,10 @@ function getPanelTitle(fpath: string): string {
         return fname;
     }
     if (extension === 'gdat' || extension === 'cdat') {
-        return 'Plot viewer';
+        return path.basename(fpath);
     }
     if (extension === 'scan') {
-        return 'Scan Plot';
+        return path.basename(fpath);
     }
     return 'Unknown';
 }
@@ -416,6 +416,7 @@ export class PlotPanel {
             ? getCanonicalGraphmlBaseName(this._fpath)
             : path.basename(this._fpath, path.extname(this._fpath));
         const exportBaseName = getExportBaseName(fname, extension);
+        const sourceFilePath = this._fpath;
 
         const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'main.js'));
         const plotlyUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'plotly-latest.min.js'));
@@ -425,13 +426,14 @@ export class PlotPanel {
 
         const folder = path.dirname(this._fpath);
 
-        webview.html = this._get_html(webview, nonce, exportBaseName, extension, folder, stylesMainUri, jqUri, cytoUri, plotlyUri, scriptUri);
+        webview.html = this._get_html(webview, nonce, exportBaseName, extension, folder, sourceFilePath, stylesMainUri, jqUri, cytoUri, plotlyUri, scriptUri);
     }
 
-    private _get_html(webview: vscode.Webview, nonce: string, exportBaseName: string, ext: string, folder: string, stylesMainUri: vscode.Uri, jqUri: vscode.Uri, cytoUri: vscode.Uri, plotlyUri: vscode.Uri, scriptUri: vscode.Uri) {
+    private _get_html(webview: vscode.Webview, nonce: string, exportBaseName: string, ext: string, folder: string, sourceFilePath: string, stylesMainUri: vscode.Uri, jqUri: vscode.Uri, cytoUri: vscode.Uri, plotlyUri: vscode.Uri, scriptUri: vscode.Uri) {
         const safeExportBaseName = escapeHtml(exportBaseName);
         const safeExt = escapeHtml(ext);
         const safeFolder = escapeHtml(folder);
+        const safeSourceFilePath = escapeHtml(sourceFilePath);
         let content = '';
         if (ext === 'graphml') {
             content = `
@@ -518,7 +520,26 @@ export class PlotPanel {
                     </div>
                 </div>
                 <div id="plot-container">
-                    <div id="plot"></div>
+                    <div id="plot_meta_bar">
+                        <div class="plot-meta-block">
+                            <div class="plot-meta-caption">Output file</div>
+                            <div id="plot_source_path" class="plot-source-path" title="${safeSourceFilePath}">${safeSourceFilePath}</div>
+                            <div id="plot_source_summary" class="plot-source-summary"></div>
+                        </div>
+                        <div class="plot-view-switch" role="tablist" aria-label="Plot viewer mode">
+                            <button id="plot_view_plot_button" class="secondary" type="button" aria-pressed="true">Plot</button>
+                            <button id="plot_view_data_button" class="secondary" type="button" aria-pressed="false">Data</button>
+                        </div>
+                    </div>
+                    <div id="plot_viewport">
+                        <div id="plot"></div>
+                        <div id="plot_data_panel" hidden>
+                            <div id="plot_data_empty" class="plot-data-empty" hidden>No data rows were available in this output file.</div>
+                            <div class="plot-data-table-shell">
+                                <table id="plot_data_table" class="plot-data-table"></table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <script nonce="${nonce}" src="${plotlyUri}"></script>
             `;

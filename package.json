@@ -44,6 +44,7 @@
     ],
     "activationEvents": [
         "onCommand:bng.results_folder",
+        "onCommand:bng.manage_processes",
         "onCommand:bng.setup",
         "onCommand:bng.upgrade",
         "onCommand:bng.menu",
@@ -152,6 +153,10 @@
                 "title": "BNG: Kill All Processes"
             },
             {
+                "command": "bng.manage_processes",
+                "title": "BNG: Manage Active Jobs"
+            },
+            {
                 "command": "bng.kill_process",
                 "title": "Kill process"
             }
@@ -185,8 +190,12 @@
                     "when": "false"
                 },
                 {
+                    "command": "bng.manage_processes",
+                    "when": "bng.hasActiveProcesses"
+                },
+                {
                     "command": "bng.process_cleanup",
-                    "when": "bng.processManagerActive"
+                    "when": "bng.hasActiveProcesses"
                 },
                 {
                     "command": "bng.results_folder",

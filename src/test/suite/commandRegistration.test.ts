@@ -18,6 +18,7 @@ suite('Command Registration', () => {
         'bng.setup',
         'bng.upgrade',
         'bng.menu',
+        'bng.manage_processes',
         'bng.process_cleanup',
         'bng.kill_process',
     ];

@@ -90,10 +90,18 @@ const SAMPLE_MODEL_BNGL = [
     ''
 ].join('\n');
 
+const SAMPLE_GDAT = [
+    '# time A B',
+    '0 1 2',
+    '1 3 4',
+    ''
+].join('\n');
+
 suite('PlotPanel', () => {
     let tmpDir: string;
     let modelPath: string;
     let graphmlPath: string;
+    let gdatPath: string;
     let regulatoryGraphmlPath: string;
     let rulevizOperationGraphmlPath: string;
     let splitRulevizOperationGraphmlPath: string;
@@ -112,12 +120,13 @@ suite('PlotPanel', () => {
     setup(async () => {
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bngl-plotpanel-test-'));
         const contactMapDir = path.join(tmpDir, 'contactmap');
+        const plotDir = path.join(tmpDir, 'plot');
         const regulatoryDir = path.join(tmpDir, 'regulatory');
         const rulevizDir = path.join(tmpDir, 'ruleviz');
         const splitRulevizDir = path.join(tmpDir, 'ruleviz_split');
         const splitDualRulevizDir = path.join(tmpDir, 'ruleviz_split_dual');
 
-        [contactMapDir, regulatoryDir, rulevizDir, splitRulevizDir, splitDualRulevizDir].forEach((dir) => {
+        [contactMapDir, plotDir, regulatoryDir, rulevizDir, splitRulevizDir, splitDualRulevizDir].forEach((dir) => {
             fs.mkdirSync(dir, { recursive: true });
             fs.writeFileSync(path.join(dir, 'test_model.bngl'), SAMPLE_MODEL_BNGL, 'utf8');
         });
@@ -125,6 +134,8 @@ suite('PlotPanel', () => {
         modelPath = path.join(contactMapDir, 'test_model.bngl');
         graphmlPath = path.join(contactMapDir, 'test_contactmap.graphml');
         fs.writeFileSync(graphmlPath, SAMPLE_GRAPHML, 'utf8');
+        gdatPath = path.join(plotDir, 'test_model.gdat');
+        fs.writeFileSync(gdatPath, SAMPLE_GDAT, 'utf8');
         regulatoryGraphmlPath = path.join(regulatoryDir, 'test_model_regulatory.graphml');
         fs.writeFileSync(regulatoryGraphmlPath, SAMPLE_REGULATORY_GRAPHML, 'utf8');
         rulevizOperationGraphmlPath = path.join(rulevizDir, 'test_model_ruleviz_operation.graphml');
@@ -186,6 +197,30 @@ suite('PlotPanel', () => {
             vscode.ViewColumn.One
         );
         assert.strictEqual(PlotPanel.currentPanels.size, 1, 'expected re-opening to reuse the existing panel');
+    });
+
+    test('uses source filenames for plot viewer titles and exposes plot/data toggle controls', async function () {
+        this.timeout(15_000);
+
+        PlotPanel.create(
+            vscode.extensions.getExtension('als251.bngl')!.extensionUri,
+            vscode.Uri.file(gdatPath),
+            vscode.ViewColumn.One
+        );
+
+        const panelWrapper = PlotPanel.currentPanels.get(gdatPath) as any;
+        assert.ok(panelWrapper, 'expected a PlotPanel instance for the GDAT file');
+
+        const panel = panelWrapper._panel as vscode.WebviewPanel;
+        assert.strictEqual(panel.title, 'test_model.gdat');
+
+        const html = panel.webview.html;
+        assert.match(html, /Output file/);
+        assert.match(html, /test_model\.gdat/);
+        assert.doesNotMatch(html, /id="plot_source_name"/);
+        assert.match(html, /id="plot_view_plot_button"/);
+        assert.match(html, /id="plot_view_data_button"/);
+        assert.match(html, /id="plot_data_table"/);
     });
 
     test('uses a unified RuleViz title for the standalone browser and reuses one panel across pattern and operation split files', async function () {

@@ -1,9 +1,22 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
+import * as path from 'path';
 
 const refreshInterval = 500;
 
-interface TrackedProcessObject {
+export type TrackedProcessKind = 'simulation' | 'visualization' | 'setup' | 'other';
+
+export interface TrackedProcessMetadata {
+    label?: string;
+    description?: string;
+    tooltip?: string;
+    kind?: TrackedProcessKind;
+    modelPath?: string;
+    resultsFolder?: string;
+    startedAt?: number;
+}
+
+export interface TrackedProcessObject extends TrackedProcessMetadata {
     pid: number;
     name: string;
     children?: TrackedProcessObject[];
@@ -43,8 +56,14 @@ export class ProcessManagerProvider implements vscode.TreeDataProvider<TrackedPr
     getTreeItem(trackedProcessObject: TrackedProcessObject): vscode.TreeItem {
         const pid = trackedProcessObject.pid;
         const name = trackedProcessObject.name.split(/[\\\/]/).pop()?.replace(".exe", "") || "unknown"; // take last segment of path if there is one, remove extension
-        let label = `${pid.toString()}: ${name}`;
-        return new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Expanded);
+        const label = trackedProcessObject.label || `${pid.toString()}: ${name}`;
+        const collapsibleState = trackedProcessObject.children && trackedProcessObject.children.length > 0
+            ? vscode.TreeItemCollapsibleState.Expanded
+            : vscode.TreeItemCollapsibleState.None;
+        const item = new vscode.TreeItem(label, collapsibleState);
+        item.description = trackedProcessObject.description;
+        item.tooltip = trackedProcessObject.tooltip || [label, trackedProcessObject.description].filter(Boolean).join('\n');
+        return item;
     }
 
     refresh() {
@@ -62,10 +81,16 @@ export class ProcessManager {
 
     private _openProcessesTracked: Map<number, TrackedProcessObject>;
     private _openProcessesUntracked: Map<number, UntrackedProcessObject>;
+    private _onDidChangeTrackedProcesses: vscode.EventEmitter<void>;
 
     constructor() {
         this._openProcessesTracked = new Map();
         this._openProcessesUntracked = new Map();
+        this._onDidChangeTrackedProcesses = new vscode.EventEmitter<void>();
+    }
+
+    get onDidChangeTrackedProcesses(): vscode.Event<void> {
+        return this._onDidChangeTrackedProcesses.event;
     }
 
     // provides roots of custom process trees to be displayed in tree view
@@ -77,20 +102,56 @@ export class ProcessManager {
         return this._openProcessesTracked.size > 0;
     }
 
-    killAllProcesses() {
+    getTrackedProcesses(kind?: TrackedProcessKind): TrackedProcessObject[] {
+        const trackedProcesses = Array.from(this._openProcessesTracked.values());
+        if (!kind) {
+            return trackedProcesses;
+        }
+
+        return trackedProcesses.filter((trackedProcessObject) => trackedProcessObject.kind === kind);
+    }
+
+    countTrackedProcesses(kind?: TrackedProcessKind): number {
+        return this.getTrackedProcesses(kind).length;
+    }
+
+    findTrackedProcessByModel(modelPath: string, kind?: TrackedProcessKind): TrackedProcessObject | undefined {
+        const resolvedModelPath = path.resolve(modelPath);
+        return this.getTrackedProcesses(kind).find((trackedProcessObject) => {
+            return typeof trackedProcessObject.modelPath === 'string'
+                && path.resolve(trackedProcessObject.modelPath) === resolvedModelPath;
+        });
+    }
+
+    async killAllProcesses() {
         for (const trackedProcessObject of this._openProcessesTracked.values()) {
-            this.killProcess(trackedProcessObject);
+            await this.killProcess(trackedProcessObject);
         }
     }
 
     // kill process selected from tree view
-    killProcess(trackedProcessObject: TrackedProcessObject) {
+    async killProcess(trackedProcessObject: TrackedProcessObject) {
         if (trackedProcessObject) {
+            await this._buildFullProcessTree();
             // need to use the corresponding full process tree
             const untrackedProcessObject = this._openProcessesUntracked.get(trackedProcessObject.pid);
             if (untrackedProcessObject) {
                 this._treeKill(untrackedProcessObject);
+                return;
             }
+
+            try {
+                process.kill(trackedProcessObject.pid);
+            } catch (e) {
+                // ignore if process already gone
+            }
+        }
+    }
+
+    async killProcessByPid(pid: number) {
+        const trackedProcessObject = this._openProcessesTracked.get(pid);
+        if (trackedProcessObject) {
+            await this.killProcess(trackedProcessObject);
         }
     }
 
@@ -107,16 +168,20 @@ export class ProcessManager {
     }
 
     // called by spawnAsync when a new process is initiated
-    add (pid: number, command: string) {
+    add (pid: number, command: string, metadata?: TrackedProcessMetadata) {
         this._openProcessesTracked.set(pid, {
             pid: pid,
-            name: command
+            name: command,
+            ...metadata
         });
+        this._onDidChangeTrackedProcesses.fire();
     }
 
     // called by spawnAsync when a tracked process terminates
     delete (pid: number) {
-        this._openProcessesTracked.delete(pid);
+        if (this._openProcessesTracked.delete(pid)) {
+            this._onDidChangeTrackedProcesses.fire();
+        }
     }
 
     async refresh() {

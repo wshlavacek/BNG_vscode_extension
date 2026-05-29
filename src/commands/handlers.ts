@@ -36,17 +36,183 @@ const PYBIONETGEN_COMPATIBILITY_CHECK = 'import pkg_resources; import bionetgen'
 const STANDALONE_REGULATORY_VISUALIZE_ACTION = 'visualize({type=>"regulatory",ruleNames=>1})';
 const STANDALONE_RULEVIZ_PATTERN_VISUALIZE_ACTION = 'visualize({type=>"ruleviz_pattern",each=>1})';
 const STANDALONE_RULEVIZ_OPERATION_VISUALIZE_ACTION = 'visualize({type=>"ruleviz_operation",each=>1})';
+const PLOT_OUTPUT_EXTENSION_PRIORITY = new Map([
+    ['gdat', 0],
+    ['scan', 1],
+    ['cdat', 2],
+]);
 
 function getTimestampedFolderName(): string {
     const d = new Date();
     return `${d.getFullYear()}_${(d.getMonth() + 1).toString().padStart(2, '0')}_${d.getDate().toString().padStart(2, '0')}__${d.getHours().toString().padStart(2, '0')}_${d.getMinutes().toString().padStart(2, '0')}_${d.getSeconds().toString().padStart(2, '0')}`;
 }
 
-async function checkGdat(outDir: string, timeout: number): Promise<void> {
+function getPlotOutputExtension(fileName: string): string | undefined {
+    const extension = path.extname(fileName).slice(1).toLowerCase();
+    return PLOT_OUTPUT_EXTENSION_PRIORITY.has(extension) ? extension : undefined;
+}
+
+function isPlotOutputFileName(fileName: string): boolean {
+    return typeof getPlotOutputExtension(fileName) === 'string';
+}
+
+function getActionStringArgument(args: string, argumentName: string): string | undefined {
+    const quotedMatch = args.match(new RegExp(`${argumentName}\\s*=>\\s*"((?:[^"\\\\]|\\\\.)*)"`, 'i'));
+    if (quotedMatch) {
+        return quotedMatch[1]
+            .replace(/\\"/g, '"')
+            .replace(/\\\\/g, '\\')
+            .trim();
+    }
+
+    const singleQuotedMatch = args.match(new RegExp(`${argumentName}\\s*=>\\s*'((?:[^'\\\\]|\\\\.)*)'`, 'i'));
+    if (singleQuotedMatch) {
+        return singleQuotedMatch[1]
+            .replace(/\\'/g, '\'')
+            .replace(/\\\\/g, '\\')
+            .trim();
+    }
+
+    const bareMatch = args.match(new RegExp(`${argumentName}\\s*=>\\s*([A-Za-z0-9_.#-]+)`, 'i'));
+    return bareMatch?.[1]?.trim();
+}
+
+function getActionOutputBaseName(modelBaseName: string, actionArgs: string): string {
+    const suffix = getActionStringArgument(actionArgs, 'suffix');
+    return suffix ? `${modelBaseName}_${suffix}` : modelBaseName;
+}
+
+interface ExpectedPlotOutputs {
+    hasRecognizedActions: boolean;
+    hasSimulateActions: boolean;
+    hasScanActions: boolean;
+    simulateBaseNames: Set<string>;
+    scanBaseNames: Set<string>;
+}
+
+function getExpectedPlotOutputs(sourceText: string | undefined, modelBaseName: string): ExpectedPlotOutputs {
+    const expected: ExpectedPlotOutputs = {
+        hasRecognizedActions: false,
+        hasSimulateActions: false,
+        hasScanActions: false,
+        simulateBaseNames: new Set<string>(),
+        scanBaseNames: new Set<string>(),
+    };
+
+    if (!sourceText || sourceText.trim().length === 0) {
+        return expected;
+    }
+
+    const document = parseBnglDocument(sourceText);
+    for (const action of document.actions) {
+        const actionName = action.name.toLowerCase();
+        const baseName = getActionOutputBaseName(modelBaseName, action.args);
+
+        if (actionName === 'simulate') {
+            expected.hasRecognizedActions = true;
+            expected.hasSimulateActions = true;
+            expected.simulateBaseNames.add(baseName);
+            continue;
+        }
+
+        if (actionName === 'parameter_scan' || actionName === 'bifurcate') {
+            expected.hasRecognizedActions = true;
+            expected.hasScanActions = true;
+            expected.scanBaseNames.add(baseName);
+        }
+    }
+
+    return expected;
+}
+
+function suppressCdatWhenPreferredOutputsExist(fileNames: readonly string[]): string[] {
+    const hasPreferredOutput = fileNames.some((name) => {
+        const extension = getPlotOutputExtension(name);
+        return extension === 'gdat' || extension === 'scan';
+    });
+
+    return hasPreferredOutput
+        ? fileNames.filter((name) => getPlotOutputExtension(name) !== 'cdat')
+        : [...fileNames];
+}
+
+function orderPlotOutputFileNames(fileNames: readonly string[], preferredBaseName?: string): string[] {
+    return [...fileNames].sort((left, right) => {
+        const leftBase = path.basename(left, path.extname(left));
+        const rightBase = path.basename(right, path.extname(right));
+        const leftPreferred = preferredBaseName && leftBase === preferredBaseName ? 0 : 1;
+        const rightPreferred = preferredBaseName && rightBase === preferredBaseName ? 0 : 1;
+
+        if (leftPreferred !== rightPreferred) {
+            return leftPreferred - rightPreferred;
+        }
+
+        const leftExtensionPriority = PLOT_OUTPUT_EXTENSION_PRIORITY.get(getPlotOutputExtension(left) ?? '') ?? Number.MAX_SAFE_INTEGER;
+        const rightExtensionPriority = PLOT_OUTPUT_EXTENSION_PRIORITY.get(getPlotOutputExtension(right) ?? '') ?? Number.MAX_SAFE_INTEGER;
+        if (leftExtensionPriority !== rightExtensionPriority) {
+            return leftExtensionPriority - rightExtensionPriority;
+        }
+
+        return left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
+    });
+}
+
+export function getAutoOpenPlotOutputFileNames(
+    fileNames: readonly string[],
+    preferredBaseName: string,
+    sourceText?: string
+): string[] {
+    const plotOutputNames = fileNames.filter((name) => isPlotOutputFileName(name));
+    if (plotOutputNames.length === 0) {
+        return [];
+    }
+
+    const expected = getExpectedPlotOutputs(sourceText, preferredBaseName);
+    if (expected.hasRecognizedActions) {
+        const explicitlySelected = suppressCdatWhenPreferredOutputsExist(
+            plotOutputNames.filter((name) => {
+                const baseName = path.basename(name, path.extname(name));
+                const extension = getPlotOutputExtension(name);
+
+                if (extension === 'scan') {
+                    return expected.scanBaseNames.has(baseName);
+                }
+
+                if (extension === 'gdat' || extension === 'cdat') {
+                    return expected.simulateBaseNames.has(baseName);
+                }
+
+                return false;
+            })
+        );
+
+        if (explicitlySelected.length > 0) {
+            return orderPlotOutputFileNames(explicitlySelected, preferredBaseName);
+        }
+
+        if (expected.hasScanActions && !expected.hasSimulateActions) {
+            return [];
+        }
+    }
+
+    return orderPlotOutputFileNames(
+        suppressCdatWhenPreferredOutputsExist(plotOutputNames),
+        preferredBaseName
+    );
+}
+
+async function checkPlotOutputs(outDir: string, preferredBaseName: string, sourceText: string, timeout: number): Promise<void> {
     const dirUri = vscode.Uri.file(outDir);
     try {
         const entries = await vscode.workspace.fs.readDirectory(dirUri);
-        if (entries.some(([name]) => name.endsWith('.gdat'))) {
+        const availableOutputs = getAutoOpenPlotOutputFileNames(
+            entries
+                .filter(([, type]) => type === vscode.FileType.File)
+                .map(([name]) => name),
+            preferredBaseName,
+            sourceText
+        );
+        if (availableOutputs.length > 0) {
             return;
         }
     } catch {
@@ -55,39 +221,54 @@ async function checkGdat(outDir: string, timeout: number): Promise<void> {
 
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
-            watcher.dispose();
-            reject(new Error('Timeout waiting for GDAT'));
+            watchers.forEach((watcher) => watcher.dispose());
+            reject(new Error('Timeout waiting for plot output'));
         }, timeout);
 
-        const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(outDir, '*.gdat'));
-        watcher.onDidCreate(() => {
-            clearTimeout(timer);
-            watcher.dispose();
-            resolve();
+        const watchers = Array.from(PLOT_OUTPUT_EXTENSION_PRIORITY.keys()).map((extension) => {
+            const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(outDir, `*.${extension}`));
+            watcher.onDidCreate(async () => {
+                try {
+                    const entries = await vscode.workspace.fs.readDirectory(dirUri);
+                    const availableOutputs = getAutoOpenPlotOutputFileNames(
+                        entries
+                            .filter(([, type]) => type === vscode.FileType.File)
+                            .map(([name]) => name),
+                        preferredBaseName,
+                        sourceText
+                    );
+                    if (availableOutputs.length === 0) {
+                        return;
+                    }
+
+                    clearTimeout(timer);
+                    watchers.forEach((currentWatcher) => currentWatcher.dispose());
+                    resolve();
+                } catch {
+                    // ignore transient file-system errors while the run is still active
+                }
+            });
+            return watcher;
         });
     });
 }
 
-async function openGdat(folderUri: vscode.Uri, fnameNoext: string, extensionContext: vscode.ExtensionContext, targetColumn?: vscode.ViewColumn) {
+async function openPlotOutputs(folderUri: vscode.Uri, fnameNoext: string, sourceText: string, extensionContext: vscode.ExtensionContext, targetColumn?: vscode.ViewColumn) {
     const files = await vscode.workspace.fs.readDirectory(folderUri);
-    let outGdatUri: vscode.Uri | undefined;
+    const plotOutputNames = getAutoOpenPlotOutputFileNames(
+        files
+            .filter(([, type]) => type === vscode.FileType.File)
+            .map(([name]) => name),
+        fnameNoext,
+        sourceText
+    );
 
-    for (const [name, type] of files) {
-        if (type !== vscode.FileType.File) continue;
-        const ext = path.extname(name).substring(1);
-        const base = path.basename(name, path.extname(name));
-
-        if (base === fnameNoext && ext === 'gdat') {
-            outGdatUri = vscode.Uri.joinPath(folderUri, name);
-            break;
-        }
-        if (!outGdatUri && ext === 'gdat') {
-            outGdatUri = vscode.Uri.joinPath(folderUri, name);
-        }
-    }
-
-    if (outGdatUri) {
-        PlotPanel.create(extensionContext.extensionUri, outGdatUri, targetColumn);
+    for (const plotOutputName of plotOutputNames) {
+        PlotPanel.create(
+            extensionContext.extensionUri,
+            vscode.Uri.joinPath(folderUri, plotOutputName),
+            targetColumn
+        );
     }
 }
 
@@ -206,6 +387,28 @@ function describeRunFolder(runFolderUri: vscode.Uri): string {
 
 function isSamePath(leftPath: string, rightPath: string): boolean {
     return path.resolve(leftPath) === path.resolve(rightPath);
+}
+
+async function confirmSimulationRerun(ctx: CommandContext, docUri: vscode.Uri): Promise<boolean> {
+    const activeRun = ctx.processManager.findTrackedProcessByModel(docUri.fsPath, 'simulation');
+    if (!activeRun) {
+        return true;
+    }
+
+    const activeRunLabel = activeRun.description || activeRun.resultsFolder || 'an existing results folder';
+    const selection = await vscode.window.showWarningMessage(
+        `A simulation for ${path.basename(docUri.fsPath)} is already running in ${activeRunLabel}. Starting another copy can consume a lot of time and CPU.`,
+        { modal: true },
+        'Manage Active Runs',
+        'Run Again'
+    );
+
+    if (selection === 'Manage Active Runs') {
+        await vscode.commands.executeCommand('bng.manage_processes');
+        return false;
+    }
+
+    return selection === 'Run Again';
 }
 
 async function updateResultsFolderSetting(docUri: vscode.Uri, folderPath: string | null): Promise<vscode.WorkspaceConfiguration> {
@@ -399,7 +602,17 @@ function createVisualizationHandler(ctx: CommandContext, visualizationType: Visu
         }
 
         ctx.channel.appendLine(term_cmd);
-        const exitCode = await spawnAsync(vizCommand, ctx.channel, ctx.processManager);
+        const exitCode = await spawnAsync(vizCommand, ctx.channel, ctx.processManager, {
+            tracking: {
+                label: `${fname} (${commandLabel})`,
+                description: getRunFolderLabel(new_fold_uri),
+                tooltip: `${commandLabel}\n${fname}\n${new_fold_uri.fsPath}`,
+                kind: 'visualization',
+                modelPath: docUri.fsPath,
+                resultsFolder: new_fold_uri.fsPath,
+                startedAt: Date.now()
+            }
+        });
         if (exitCode !== 0) {
             vscode.window.showInformationMessage('Something went wrong, see BNGL output channel for details.');
             ctx.channel.show();
@@ -423,6 +636,11 @@ export function createRunHandler(ctx: CommandContext) {
         const fname = path.basename(docUri.fsPath);
         const sourceColumn = editor.viewColumn;
 
+        const shouldStartRun = await confirmSimulationRerun(ctx, docUri);
+        if (!shouldStartRun) {
+            return;
+        }
+
         const config = vscode.workspace.getConfiguration('bngl', docUri);
         const fname_noext = path.basename(docUri.fsPath, path.extname(docUri.fsPath));
         const fold_name = getTimestampedFolderName();
@@ -431,13 +649,13 @@ export function createRunHandler(ctx: CommandContext) {
 
         await vscode.workspace.fs.createDirectory(new_fold_uri);
         await vscode.workspace.fs.copy(editor.document.uri, copy_path);
+        const copiedSourceText = Buffer.from(await vscode.workspace.fs.readFile(copy_path)).toString('utf8');
 
         const pythonCommand = await getPythonCommand(ctx.channel);
         const runCommand = createBionetgenCommand(pythonCommand, ctx.pybngVersion, ['run', '-i', copy_path.fsPath, '-o', new_fold_uri.fsPath, '-l', new_fold_uri.fsPath]);
         const term_cmd = formatCommandSpec(runCommand);
         ctx.channel.appendLine(`Simulation results folder: ${new_fold_uri.fsPath}`);
         ctx.channel.appendLine(`Watching ${new_fold_uri.fsPath} for BioNetGen log files.`);
-        vscode.window.showInformationMessage(`Started running ${fname} in ${describeRunFolder(new_fold_uri)}`);
 
         if (config.get<boolean>('general.enable_terminal_runner')) {
             ctx.channel.appendLine('Live BioNetGen log streaming is available only when bngl.general.enable_terminal_runner is disabled.');
@@ -447,35 +665,86 @@ export function createRunHandler(ctx: CommandContext) {
             }
             term.show();
             term.sendText(term_cmd);
+            vscode.window.showInformationMessage(`Started running ${fname} in ${describeRunFolder(new_fold_uri)}`);
 
             if (config.get<boolean>('general.auto_open')) {
-                checkGdat(new_fold_uri.fsPath, 120000).then(() => {
-                    openGdat(new_fold_uri, fname_noext, ctx.extensionContext, sourceColumn);
+                checkPlotOutputs(new_fold_uri.fsPath, fname_noext, copiedSourceText, 120000).then(() => {
+                    openPlotOutputs(new_fold_uri, fname_noext, copiedSourceText, ctx.extensionContext, sourceColumn);
                 }).catch((err) => {
-                    ctx.channel.appendLine(`Error auto-opening GDAT: ${err}`);
+                    ctx.channel.appendLine(`Error auto-opening plot outputs: ${err}`);
                 });
             }
         } else {
             ctx.channel.appendLine(term_cmd);
             const logStream = startLogStreaming(new_fold_uri.fsPath, ctx.channel);
-            const process = spawnAsync(runCommand, ctx.channel, ctx.processManager);
-            process.then(async (exitCode) => {
-                await logStream.stop();
-                if (exitCode !== 0) {
-                    vscode.window.showInformationMessage('Something went wrong, see BNGL output channel for details.');
-                    ctx.channel.show();
-                } else {
-                    vscode.window.showInformationMessage(`Finished running ${fname}. Results are in ${describeRunFolder(new_fold_uri)}`);
-                    if (config.get<boolean>('general.auto_open')) {
-                        openGdat(new_fold_uri, fname_noext, ctx.extensionContext, sourceColumn).catch(err => {
-                            ctx.channel.appendLine(`Error auto-opening GDAT: ${err}`);
-                        });
+            let spawnedPid: number | undefined;
+            let cancellationRequested = false;
+            const process = spawnAsync(runCommand, ctx.channel, ctx.processManager, {
+                tracking: {
+                    label: fname,
+                    description: getRunFolderLabel(new_fold_uri),
+                    tooltip: `Simulation\n${fname}\n${new_fold_uri.fsPath}`,
+                    kind: 'simulation',
+                    modelPath: docUri.fsPath,
+                    resultsFolder: new_fold_uri.fsPath,
+                    startedAt: Date.now()
+                },
+                onSpawn: (_process, pid) => {
+                    spawnedPid = pid;
+                    if (cancellationRequested && pid) {
+                        void ctx.processManager.killProcessByPid(pid);
                     }
                 }
-            }).catch(async (err) => {
+            });
+
+            let exitCode: number;
+            try {
+                exitCode = await vscode.window.withProgress(
+                    {
+                        location: vscode.ProgressLocation.Notification,
+                        title: `Running ${fname}`,
+                        cancellable: true
+                    },
+                    async (progress, token) => {
+                        progress.report({
+                            message: `Results: ${describeRunFolder(new_fold_uri)}`
+                        });
+                        token.onCancellationRequested(() => {
+                            cancellationRequested = true;
+                            ctx.channel.appendLine(`Cancellation requested for ${fname}.`);
+                            if (spawnedPid) {
+                                void ctx.processManager.killProcessByPid(spawnedPid);
+                            }
+                        });
+
+                        return process;
+                    }
+                );
+            } catch (err) {
                 await logStream.stop();
                 ctx.channel.appendLine(`Process execution error: ${err}`);
-            });
+                return;
+            }
+
+            await logStream.stop();
+
+            if (cancellationRequested) {
+                vscode.window.showInformationMessage(`Canceled ${fname}. Partial results remain in ${describeRunFolder(new_fold_uri)}.`);
+                return;
+            }
+
+            if (exitCode !== 0) {
+                vscode.window.showInformationMessage('Something went wrong, see BNGL output channel for details.');
+                ctx.channel.show();
+                return;
+            }
+
+            vscode.window.showInformationMessage(`Finished running ${fname}. Results are in ${describeRunFolder(new_fold_uri)}`);
+            if (config.get<boolean>('general.auto_open')) {
+                openPlotOutputs(new_fold_uri, fname_noext, copiedSourceText, ctx.extensionContext, sourceColumn).catch(err => {
+                    ctx.channel.appendLine(`Error auto-opening plot outputs: ${err}`);
+                });
+            }
         }
     };
 }

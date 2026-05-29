@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { LanguageClient, LanguageClientOptions, ServerOptions, TransportKind } from 'vscode-languageclient/node';
-import { ProcessManager, ProcessManagerProvider } from './utils/processManagement';
+import { ProcessManager, ProcessManagerProvider, TrackedProcessObject } from './utils/processManagement';
 import { PlotPanel } from './plotting/PlotPanel';
 import { createRunHandler, createVizHandler, createContactMapHandler, createRegulatoryGraphHandler, createRulevizHandler, createRulevizOperationHandler, createResultsFolderHandler, createSetupHandler, createUpgradeHandler, CommandContext } from './commands/handlers';
 import { menuCommandHandler } from './commands/menu';
@@ -10,6 +10,32 @@ import { bnglFoldingProvider } from './folding/foldingProvider';
 const PYBNG_VERSION = '0.5.0';
 
 let client: LanguageClient | undefined;
+
+interface ManageProcessQuickPickItem extends vscode.QuickPickItem {
+	action: 'stop_all' | 'reveal' | 'show_output' | 'stop_one';
+	process?: TrackedProcessObject;
+}
+
+function getTrackedProcessDisplayLabel(processObject: TrackedProcessObject): string {
+	if (processObject.label) {
+		return processObject.label;
+	}
+
+	if (processObject.modelPath) {
+		return path.basename(processObject.modelPath);
+	}
+
+	return processObject.name.split(/[\\\/]/).pop()?.replace('.exe', '') || 'unknown';
+}
+
+async function revealProcessManagerView() {
+	await vscode.commands.executeCommand('workbench.view.explorer');
+	try {
+		await vscode.commands.executeCommand('processManagerTreeView.focus');
+	} catch {
+		// ignore if VS Code cannot focus the contributed view directly
+	}
+}
 
 export function activate(context: vscode.ExtensionContext) {
 	// Start the language server
@@ -34,6 +60,47 @@ export function activate(context: vscode.ExtensionContext) {
 		extensionContext: context,
 	};
 
+	const activeJobsStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+	activeJobsStatusBarItem.name = 'BNG Active Jobs';
+	activeJobsStatusBarItem.command = 'bng.manage_processes';
+	context.subscriptions.push(activeJobsStatusBarItem);
+
+	const updateActiveJobsStatus = () => {
+		const activeProcesses = processManager.getTrackedProcesses();
+		const activeSimulations = processManager.getTrackedProcesses('simulation');
+
+		if (activeProcesses.length === 0) {
+			activeJobsStatusBarItem.hide();
+			void vscode.commands.executeCommand('setContext', 'bng.hasActiveProcesses', false);
+			return;
+		}
+
+		const primaryProcesses = activeSimulations.length > 0 ? activeSimulations : activeProcesses;
+		const primaryLabel = activeSimulations.length > 0 ? 'run' : 'job';
+		const primaryCount = primaryProcesses.length;
+		const preview = primaryProcesses
+			.slice(0, 5)
+			.map((processObject) => {
+				const description = processObject.description ? ` - ${processObject.description}` : '';
+				return `• ${getTrackedProcessDisplayLabel(processObject)}${description}`;
+			})
+			.join('\n');
+		const remainingCount = Math.max(primaryProcesses.length - 5, 0);
+		const tooltipLines = [
+			`BioNetGen has ${activeProcesses.length} active job${activeProcesses.length === 1 ? '' : 's'}.`,
+			preview,
+			remainingCount > 0 ? `• ${remainingCount} more` : '',
+			'Click to manage active jobs.'
+		].filter((line) => line.length > 0);
+
+		activeJobsStatusBarItem.text = `$(sync~spin) BNG: ${primaryCount} ${primaryLabel}${primaryCount === 1 ? '' : 's'} active`;
+		activeJobsStatusBarItem.tooltip = tooltipLines.join('\n');
+		activeJobsStatusBarItem.show();
+		void vscode.commands.executeCommand('setContext', 'bng.hasActiveProcesses', true);
+	};
+
+	context.subscriptions.push(processManager.onDidChangeTrackedProcesses(updateActiveJobsStatus));
+
 	// Register commands
 	context.subscriptions.push(
 		vscode.commands.registerCommand('bng.run_bngl', createRunHandler(ctx)),
@@ -48,6 +115,68 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('bng.upgrade', createUpgradeHandler(ctx)),
 		vscode.commands.registerCommand('bng.process_cleanup', () => processManager.killAllProcesses()),
 		vscode.commands.registerCommand('bng.kill_process', (processObject) => processManager.killProcess(processObject)),
+		vscode.commands.registerCommand('bng.manage_processes', async () => {
+			const activeProcesses = processManager.getTrackedProcesses();
+			if (activeProcesses.length === 0) {
+				vscode.window.showInformationMessage('No active BioNetGen jobs.');
+				return;
+			}
+
+			const items: ManageProcessQuickPickItem[] = [
+				{
+					label: '$(stop-circle) Stop All Active Jobs',
+					detail: 'Kill every tracked BioNetGen job.',
+					action: 'stop_all'
+				},
+				{
+					label: '$(list-tree) Reveal BNG Process Manager',
+					detail: 'Open the Explorer view with the active process tree.',
+					action: 'reveal'
+				},
+				{
+					label: '$(output) Show BNGL Output',
+					detail: 'Open the BNGL output channel.',
+					action: 'show_output'
+				},
+				...activeProcesses.map((processObject) => ({
+					label: `$(stop-circle) Stop ${getTrackedProcessDisplayLabel(processObject)}`,
+					description: processObject.description,
+					detail: processObject.resultsFolder || processObject.modelPath || processObject.name,
+					action: 'stop_one' as const,
+					process: processObject
+				}))
+			];
+
+			const pick = await vscode.window.showQuickPick(items, {
+				title: `${activeProcesses.length} Active BioNetGen Job${activeProcesses.length === 1 ? '' : 's'}`,
+				placeHolder: 'Choose an action'
+			});
+
+			if (!pick) {
+				return;
+			}
+
+			if (pick.action === 'stop_all') {
+				await processManager.killAllProcesses();
+				vscode.window.showInformationMessage('Stopping all active BioNetGen jobs.');
+				return;
+			}
+
+			if (pick.action === 'reveal') {
+				await revealProcessManagerView();
+				return;
+			}
+
+			if (pick.action === 'show_output') {
+				channel.show();
+				return;
+			}
+
+			if (pick.process) {
+				await processManager.killProcess(pick.process);
+				vscode.window.showInformationMessage(`Stopping ${getTrackedProcessDisplayLabel(pick.process)}.`);
+			}
+		}),
 		vscode.commands.registerCommand('bng.menu', menuCommandHandler),
 	);
 
@@ -57,6 +186,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	context.subscriptions.push(treeView);
 	vscode.commands.executeCommand('setContext', 'bng.processManagerActive', true);
+	updateActiveJobsStatus();
 
 	// Auto-install check (runs after commands are registered)
 	const config = vscode.workspace.getConfiguration('bngl');

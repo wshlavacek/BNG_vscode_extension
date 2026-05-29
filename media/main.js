@@ -6,6 +6,12 @@
     const network = document.getElementById('network');
     const rulevizBrowser = document.getElementById('ruleviz_browser');
     const plotElement = document.getElementById('plot');
+    const plotDataPanel = document.getElementById('plot_data_panel');
+    const plotDataTable = document.getElementById('plot_data_table');
+    const plotDataEmpty = document.getElementById('plot_data_empty');
+    const plotSourceSummary = document.getElementById('plot_source_summary');
+    const plotViewPlotButton = document.getElementById('plot_view_plot_button');
+    const plotViewDataButton = document.getElementById('plot_view_data_button');
     const viewModeButton = document.getElementById('view_mode_button');
 
     const page_title = document.getElementById('page_title').innerText;
@@ -170,6 +176,10 @@
     };
 
     let current_plot_data = [];
+    let currentPlotView = 'plot';
+    let currentPlotTableNames = [];
+    let currentPlotTableColumns = [];
+    let plotDataTableRendered = false;
     let plotReady = false;
     let currentCy = null;
     let graphKind = 'other';
@@ -520,6 +530,125 @@
             'legend.bordercolor': theme.border,
             'legend.font.color': theme.foreground
         });
+    }
+
+    function pluralize(count, noun) {
+        return `${count} ${noun}${count === 1 ? '' : 's'}`;
+    }
+
+    function getPlotRowCount(columns) {
+        if (!Array.isArray(columns) || columns.length === 0 || !Array.isArray(columns[0])) {
+            return 0;
+        }
+
+        return columns[0].length;
+    }
+
+    function updatePlotSourceSummary(names, columns) {
+        if (!plotSourceSummary) {
+            return;
+        }
+
+        const columnCount = Array.isArray(names) ? names.length : 0;
+        const rowCount = getPlotRowCount(columns);
+        const seriesCount = Math.max(columnCount - 1, 0);
+        const summaryParts = [];
+
+        if (columnCount > 0) {
+            summaryParts.push(pluralize(columnCount, 'column'));
+        }
+        if (rowCount > 0) {
+            summaryParts.push(pluralize(rowCount, 'row'));
+        }
+        if (seriesCount > 0) {
+            summaryParts.push(pluralize(seriesCount, 'plotted series'));
+        }
+
+        plotSourceSummary.textContent = summaryParts.join(' • ') || 'No plotted data detected.';
+    }
+
+    function renderPlotDataTable() {
+        if (!plotDataTable) {
+            return;
+        }
+
+        if (plotDataTableRendered) {
+            return;
+        }
+
+        plotDataTable.innerHTML = '';
+        const columnNames = Array.isArray(currentPlotTableNames) ? currentPlotTableNames : [];
+        const columnData = Array.isArray(currentPlotTableColumns) ? currentPlotTableColumns : [];
+        const rowCount = getPlotRowCount(columnData);
+        const hasRows = columnNames.length > 0 && rowCount > 0;
+
+        if (plotDataEmpty) {
+            plotDataEmpty.hidden = hasRows;
+        }
+
+        if (!hasRows) {
+            plotDataTableRendered = true;
+            return;
+        }
+
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        columnNames.forEach((name) => {
+            const headerCell = document.createElement('th');
+            headerCell.textContent = name;
+            headerRow.appendChild(headerCell);
+        });
+        thead.appendChild(headerRow);
+
+        const tbody = document.createElement('tbody');
+        for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+            const row = document.createElement('tr');
+            for (let columnIndex = 0; columnIndex < columnNames.length; columnIndex += 1) {
+                const cell = document.createElement('td');
+                const value = Array.isArray(columnData[columnIndex]) ? columnData[columnIndex][rowIndex] : '';
+                cell.textContent = value ?? '';
+                row.appendChild(cell);
+            }
+            tbody.appendChild(row);
+        }
+
+        plotDataTable.appendChild(thead);
+        plotDataTable.appendChild(tbody);
+        plotDataTableRendered = true;
+    }
+
+    function setPlotViewerMode(view) {
+        currentPlotView = view === 'data' ? 'data' : 'plot';
+
+        if (plotViewPlotButton) {
+            const isPlotView = currentPlotView === 'plot';
+            plotViewPlotButton.classList.toggle('active', isPlotView);
+            plotViewPlotButton.setAttribute('aria-pressed', isPlotView ? 'true' : 'false');
+        }
+
+        if (plotViewDataButton) {
+            const isDataView = currentPlotView === 'data';
+            plotViewDataButton.classList.toggle('active', isDataView);
+            plotViewDataButton.setAttribute('aria-pressed', isDataView ? 'true' : 'false');
+        }
+
+        if (currentPlotView === 'data') {
+            renderPlotDataTable();
+        }
+
+        if (plotElement) {
+            plotElement.hidden = currentPlotView !== 'plot';
+        }
+
+        if (plotDataPanel) {
+            plotDataPanel.hidden = currentPlotView !== 'data';
+        }
+
+        if (currentPlotView === 'plot' && plotReady && plotElement) {
+            requestAnimationFrame(() => {
+                Plotly.Plots.resize(plotElement);
+            });
+        }
     }
 
     function adaptGraphColor(color, role) {
@@ -4667,6 +4796,18 @@
         };
     }
 
+    if (plotViewPlotButton) {
+        plotViewPlotButton.onclick = function () {
+            setPlotViewerMode('plot');
+        };
+    }
+
+    if (plotViewDataButton) {
+        plotViewDataButton.onclick = function () {
+            setPlotViewerMode('data');
+        };
+    }
+
     setViewMode(currentViewMode, false);
 
     // Handle messages sent from the extension to the webview
@@ -4675,6 +4816,19 @@
         switch (message.command) {
             case 'plot':
                 current_plot_data = [];
+                currentPlotTableNames = Array.isArray(message.names) ? message.names.slice() : [];
+                currentPlotTableColumns = Array.isArray(message.data)
+                    ? message.data.map((column) => Array.isArray(column) ? column.slice() : [])
+                    : [];
+                plotDataTableRendered = false;
+                if (plotDataTable) {
+                    plotDataTable.innerHTML = '';
+                }
+                if (plotDataEmpty) {
+                    plotDataEmpty.hidden = true;
+                }
+                updatePlotSourceSummary(currentPlotTableNames, currentPlotTableColumns);
+                setPlotViewerMode('plot');
 
                 const varList = document.getElementById('var-list');
                 varList.innerHTML = '';

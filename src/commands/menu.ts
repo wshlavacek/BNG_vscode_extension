@@ -15,7 +15,6 @@ export async function menuCommandHandler() {
             { label: '$(graph) Contact Map', description: 'Generate only the contact map GraphML', cmd: 'bng.run_contactmap' },
             { label: '$(type-hierarchy) Regulatory Graph', description: 'Generate only the regulatory graph GraphML', cmd: 'bng.run_regulatory' },
             { label: '$(type-hierarchy) RuleViz', description: 'Generate standalone RuleViz outputs with operation and pattern views', cmd: 'bng.run_ruleviz' },
-            { label: '$(type-hierarchy) All Graphs', description: 'Generate contact map, rule visualization, and regulatory GraphML outputs', cmd: 'bng.run_viz' },
             { label: '$(folder) Results Folder...', description: 'Choose where generated results are written', cmd: 'bng.results_folder' },
         );
     }

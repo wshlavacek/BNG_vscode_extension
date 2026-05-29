@@ -125,12 +125,124 @@ body.plot-view {
 	top: 0;
 	bottom: 0;
 	overflow: hidden;
+	display: flex;
+	flex-direction: column;
 	background: var(--viewer-background);
+}
+
+#plot_meta_bar {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 12px 16px;
+	border-bottom: 1px solid var(--viewer-border);
+	background: var(--viewer-panel-background);
+}
+
+.plot-meta-block {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.plot-meta-caption {
+	font-size: 0.75em;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: var(--viewer-muted-foreground);
+}
+
+.plot-source-path,
+.plot-source-summary {
+	font-size: 0.82em;
+	line-height: 1.35;
+	color: var(--viewer-muted-foreground);
+	word-break: break-word;
+}
+
+.plot-view-switch {
+	display: flex;
+	gap: 8px;
+	flex-shrink: 0;
+}
+
+.plot-view-switch button {
+	min-width: 76px;
+}
+
+.plot-view-switch button.active {
+	color: var(--viewer-button-foreground);
+	background: var(--viewer-button-background);
+}
+
+#plot_viewport {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+}
+
+#plot,
+#plot_data_panel {
+	position: absolute;
+	inset: 0;
 }
 
 #plot {
 	height: 100%;
 	width: 100%;
+}
+
+#plot[hidden],
+#plot_data_panel[hidden] {
+	display: none !important;
+}
+
+#plot_data_panel {
+	overflow: auto;
+	background: var(--viewer-background);
+}
+
+.plot-data-table-shell {
+	min-width: max-content;
+	padding: 16px 18px 20px;
+	box-sizing: border-box;
+}
+
+.plot-data-table {
+	border-collapse: collapse;
+	background: var(--viewer-panel-background);
+	color: var(--viewer-foreground);
+	border: 1px solid var(--viewer-border);
+}
+
+.plot-data-table th,
+.plot-data-table td {
+	padding: 6px 10px;
+	border: 1px solid var(--viewer-border);
+	text-align: left;
+	white-space: nowrap;
+	font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
+	font-size: 0.9em;
+}
+
+.plot-data-table th {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--viewer-panel-background);
+	color: var(--viewer-foreground);
+}
+
+.plot-data-table tbody tr:nth-child(even) {
+	background: var(--viewer-hover-background);
+}
+
+.plot-data-empty {
+	padding: 24px 18px;
+	color: var(--viewer-muted-foreground);
 }
 
 #sidebar {
@@ -514,6 +626,23 @@ textarea::placeholder {
 }
 
 @media (max-width: 920px) {
+	#sidebar {
+		width: 220px;
+	}
+
+	#plot-container {
+		left: 220px;
+	}
+
+	#plot_meta_bar {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.plot-view-switch {
+		justify-content: flex-start;
+	}
+
 	.ruleviz-browser-row {
 		grid-template-columns: 1fr;
 	}
