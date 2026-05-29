@@ -255,6 +255,26 @@
                     "default": null,
                     "scope": "resource"
                 },
+                "bngl.general.results_retention": {
+                    "markdownDescription": "Cleanup policy for timestamped subfolders under `results_<model>/`. Cleanup is folder-based, applies before future generated runs, and skips active BioNetGen jobs.",
+                    "type": "string",
+                    "enum": [
+                        "keep_all",
+                        "purge_existing",
+                        "delete_older_than_1w",
+                        "delete_older_than_1d",
+                        "delete_older_than_1h"
+                    ],
+                    "enumDescriptions": [
+                        "Keep all timestamped run folders until you remove them manually.",
+                        "Delete all pre-existing timestamped run folders before future runs.",
+                        "Delete timestamped run folders older than 1 week before future runs.",
+                        "Delete timestamped run folders older than 1 day before future runs.",
+                        "Delete timestamped run folders older than 1 hour before future runs."
+                    ],
+                    "default": "keep_all",
+                    "scope": "resource"
+                },
                 "bngl.plotting.legend": {
                     "markdownDescription": "To plot the legend or not with built-in plotting",
                     "type": "boolean",

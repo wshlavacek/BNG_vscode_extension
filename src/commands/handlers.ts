@@ -11,9 +11,13 @@ import {
     getModelFolderUri,
     getResultsBaseFolderUri,
     getResultsFolderConfigurationTarget,
+    getResultsRetentionPolicy,
+    getResultsRetentionPolicyLabel,
     getResultsRootFolderName,
     getResultsRootUri,
     getResultsRunFolderUri,
+    ResultsRetentionPolicy,
+    shouldDeleteGeneratedResultsRunFolder,
 } from '../resultsFolders';
 
 export interface CommandContext {
@@ -24,9 +28,10 @@ export interface CommandContext {
 }
 
 export type VisualizationType = 'all' | 'contactmap' | 'regulatory' | 'ruleviz' | 'ruleviz_operation';
+type ResultsFolderAction = 'default' | 'workspace' | 'choose' | 'retention_keep_all' | 'retention_1h' | 'retention_1d' | 'retention_1w' | 'retention_purge';
 
 interface ResultsFolderMenuItem extends vscode.QuickPickItem {
-    action: 'default' | 'workspace' | 'choose';
+    action: ResultsFolderAction;
 }
 
 const PYBIONETGEN_ENTRYPOINT = 'from bionetgen.main import main as _bng_main; raise SystemExit(_bng_main())';
@@ -418,6 +423,13 @@ async function updateResultsFolderSetting(docUri: vscode.Uri, folderPath: string
     return vscode.workspace.getConfiguration('bngl', docUri);
 }
 
+async function updateResultsRetentionSetting(docUri: vscode.Uri, retentionPolicy: ResultsRetentionPolicy): Promise<vscode.WorkspaceConfiguration> {
+    const config = vscode.workspace.getConfiguration('bngl', docUri);
+    const target = getResultsFolderConfigurationTarget(docUri);
+    await config.update('general.results_retention', retentionPolicy, target);
+    return vscode.workspace.getConfiguration('bngl', docUri);
+}
+
 async function chooseCustomResultsFolder(docUri: vscode.Uri): Promise<vscode.Uri | undefined> {
     const config = vscode.workspace.getConfiguration('bngl', docUri);
     const currentBaseFolderUri = getResultsBaseFolderUri(config, docUri);
@@ -430,6 +442,138 @@ async function chooseCustomResultsFolder(docUri: vscode.Uri): Promise<vscode.Uri
     });
 
     return selection?.[0];
+}
+
+function getResultsRetentionPolicyForAction(action: ResultsFolderAction): ResultsRetentionPolicy | undefined {
+    if (action === 'retention_purge') {
+        return 'purge_existing';
+    }
+
+    if (action === 'retention_1h') {
+        return 'delete_older_than_1h';
+    }
+
+    if (action === 'retention_1d') {
+        return 'delete_older_than_1d';
+    }
+
+    if (action === 'retention_1w') {
+        return 'delete_older_than_1w';
+    }
+
+    if (action === 'retention_keep_all') {
+        return 'keep_all';
+    }
+
+    return undefined;
+}
+
+function getResultsRetentionPolicyDescription(policy: ResultsRetentionPolicy): string {
+    if (policy === 'purge_existing') {
+        return 'Before future runs, all pre-existing timestamped run folders will be deleted from this model\'s results root.';
+    }
+
+    if (policy === 'delete_older_than_1h') {
+        return 'Before future runs, old timestamped run folders older than 1 hour will be deleted from this model\'s results root.';
+    }
+
+    if (policy === 'delete_older_than_1d') {
+        return 'Before future runs, old timestamped run folders older than 1 day will be deleted from this model\'s results root.';
+    }
+
+    if (policy === 'delete_older_than_1w') {
+        return 'Before future runs, old timestamped run folders older than 1 week will be deleted from this model\'s results root.';
+    }
+
+    return 'Before future runs, timestamped run folders will accumulate until you remove them manually.';
+}
+
+function getActiveResultsRunFolderPaths(processManager: ProcessManager, resultsRootPath: string): Set<string> {
+    const normalizedResultsRootPath = path.resolve(resultsRootPath);
+
+    return new Set(
+        processManager
+            .getTrackedProcesses()
+            .flatMap((trackedProcessObject) => {
+                if (typeof trackedProcessObject.resultsFolder !== 'string') {
+                    return [];
+                }
+
+                const trackedResultsFolderPath = path.resolve(trackedProcessObject.resultsFolder);
+                if (path.resolve(path.dirname(trackedResultsFolderPath)) !== normalizedResultsRootPath) {
+                    return [];
+                }
+
+                return [trackedResultsFolderPath];
+            })
+    );
+}
+
+async function pruneStaleResultsRunFolders(
+    ctx: CommandContext,
+    resultsRootUri: vscode.Uri,
+    retentionPolicy: ResultsRetentionPolicy
+): Promise<number> {
+    if (retentionPolicy === 'keep_all') {
+        return 0;
+    }
+
+    let entries: [string, vscode.FileType][];
+    try {
+        entries = await vscode.workspace.fs.readDirectory(resultsRootUri);
+    } catch {
+        return 0;
+    }
+
+    const activeRunFolderPaths = getActiveResultsRunFolderPaths(ctx.processManager, resultsRootUri.fsPath);
+    let deletedCount = 0;
+
+    for (const [name, fileType] of entries) {
+        if (fileType !== vscode.FileType.Directory) {
+            continue;
+        }
+
+        if (!shouldDeleteGeneratedResultsRunFolder(name, retentionPolicy)) {
+            continue;
+        }
+
+        const runFolderUri = vscode.Uri.joinPath(resultsRootUri, name);
+        const normalizedRunFolderPath = path.resolve(runFolderUri.fsPath);
+        if (activeRunFolderPaths.has(normalizedRunFolderPath)) {
+            ctx.channel.appendLine(`Skipping cleanup for active results folder: ${runFolderUri.fsPath}`);
+            continue;
+        }
+
+        PlotPanel.disposeForFolder(runFolderUri.fsPath);
+
+        try {
+            await vscode.workspace.fs.delete(runFolderUri, { recursive: true, useTrash: false });
+            deletedCount += 1;
+            ctx.channel.appendLine(`Deleted stale results folder: ${runFolderUri.fsPath}`);
+        } catch (err) {
+            ctx.channel.appendLine(`Could not delete stale results folder ${runFolderUri.fsPath}: ${err}`);
+        }
+    }
+
+    return deletedCount;
+}
+
+async function prepareResultsRunFolder(
+    ctx: CommandContext,
+    config: vscode.WorkspaceConfiguration,
+    docUri: vscode.Uri,
+    timestamp: string
+): Promise<vscode.Uri> {
+    const resultsRootUri = getResultsRootUri(config, docUri);
+    const retentionPolicy = getResultsRetentionPolicy(config);
+    const deletedCount = await pruneStaleResultsRunFolders(ctx, resultsRootUri, retentionPolicy);
+    if (deletedCount > 0) {
+        ctx.channel.appendLine(`Cleaned up ${deletedCount} stale results folder${deletedCount === 1 ? '' : 's'} from ${resultsRootUri.fsPath}.`);
+    }
+
+    const resultsRunFolderUri = getResultsRunFolderUri(config, docUri, timestamp);
+    await vscode.workspace.fs.createDirectory(resultsRunFolderUri);
+    return resultsRunFolderUri;
 }
 
 function getVisualizationOutputMatcher(visualizationType: VisualizationType) {
@@ -551,10 +695,9 @@ function createVisualizationHandler(ctx: CommandContext, visualizationType: Visu
 
         const config = vscode.workspace.getConfiguration('bngl', docUri);
         const fold_name = getTimestampedFolderName();
-        const new_fold_uri = getResultsRunFolderUri(config, docUri, fold_name);
+        const new_fold_uri = await prepareResultsRunFolder(ctx, config, docUri, fold_name);
         const copy_path = vscode.Uri.joinPath(new_fold_uri, fname);
 
-        await vscode.workspace.fs.createDirectory(new_fold_uri);
         if (visualizationType === 'regulatory' || visualizationType === 'ruleviz' || visualizationType === 'ruleviz_operation') {
             const sourceBytes = await vscode.workspace.fs.readFile(editor.document.uri);
             const sourceText = Buffer.from(sourceBytes).toString('utf8');
@@ -644,10 +787,9 @@ export function createRunHandler(ctx: CommandContext) {
         const config = vscode.workspace.getConfiguration('bngl', docUri);
         const fname_noext = path.basename(docUri.fsPath, path.extname(docUri.fsPath));
         const fold_name = getTimestampedFolderName();
-        const new_fold_uri = getResultsRunFolderUri(config, docUri, fold_name);
+        const new_fold_uri = await prepareResultsRunFolder(ctx, config, docUri, fold_name);
         const copy_path = vscode.Uri.joinPath(new_fold_uri, fname);
 
-        await vscode.workspace.fs.createDirectory(new_fold_uri);
         await vscode.workspace.fs.copy(editor.document.uri, copy_path);
         const copiedSourceText = Buffer.from(await vscode.workspace.fs.readFile(copy_path)).toString('utf8');
 
@@ -782,9 +924,14 @@ export function createResultsFolderHandler(ctx: CommandContext) {
         const modelFolderUri = getModelFolderUri(docUri);
         const workspaceFolderUri = vscode.workspace.getWorkspaceFolder(docUri)?.uri;
         const currentRootUri = getResultsRootUri(config, docUri);
+        const currentRetentionPolicy = getResultsRetentionPolicy(config);
         const defaultRootUri = vscode.Uri.joinPath(modelFolderUri, getResultsRootFolderName(docUri.fsPath));
 
-        const items: ResultsFolderMenuItem[] = [
+        const items: Array<ResultsFolderMenuItem | vscode.QuickPickItem> = [
+            {
+                label: 'Results Location',
+                kind: vscode.QuickPickItemKind.Separator
+            },
             {
                 label: 'Use model\'s folder (Default)',
                 description: 'Write results beside the current model.',
@@ -810,12 +957,50 @@ export function createResultsFolderHandler(ctx: CommandContext) {
             action: 'choose'
         });
 
-        const pick = await vscode.window.showQuickPick(items, {
-            title: `Current target: ${currentRootUri.fsPath}`,
-            placeHolder: `Results Folder for ${modelFileName}`
+        items.push({
+            label: 'Cleanup Policy',
+            kind: vscode.QuickPickItemKind.Separator
         });
 
-        if (!pick) {
+        items.push(
+            {
+                label: 'Keep all runs',
+                description: currentRetentionPolicy === 'keep_all' ? 'Current setting' : 'Never delete older timestamped run folders automatically.',
+                detail: 'Recommended for archival workflows.',
+                action: 'retention_keep_all'
+            },
+            {
+                label: 'Delete timestamped run folders older than 1 week',
+                description: currentRetentionPolicy === 'delete_older_than_1w' ? 'Current setting' : 'A balanced cleanup window.',
+                detail: 'Cleanup is folder-based and skips active BioNetGen jobs.',
+                action: 'retention_1w'
+            },
+            {
+                label: 'Delete timestamped run folders older than 1 day',
+                description: currentRetentionPolicy === 'delete_older_than_1d' ? 'Current setting' : 'Recommended for scratch results.',
+                detail: 'Cleanup is folder-based and skips active BioNetGen jobs.',
+                action: 'retention_1d'
+            },
+            {
+                label: 'Delete timestamped run folders older than 1 hour',
+                description: currentRetentionPolicy === 'delete_older_than_1h' ? 'Current setting' : 'More aggressive scratch cleanup.',
+                detail: 'Cleanup is folder-based and skips active BioNetGen jobs.',
+                action: 'retention_1h'
+            },
+            {
+                label: 'Purge all pre-existing timestamped run folders',
+                description: currentRetentionPolicy === 'purge_existing' ? 'Current setting' : 'Ultra aggressive cleanup.',
+                detail: 'Deletes all older timestamped run folders before future runs, while still skipping active BioNetGen jobs.',
+                action: 'retention_purge'
+            }
+        );
+
+        const pick = await vscode.window.showQuickPick(items, {
+            title: `Current target: ${currentRootUri.fsPath}`,
+            placeHolder: `Results Folder for ${modelFileName} • Cleanup: ${getResultsRetentionPolicyLabel(currentRetentionPolicy)}`
+        });
+
+        if (!pick || !('action' in pick)) {
             return;
         }
 
@@ -853,6 +1038,16 @@ export function createResultsFolderHandler(ctx: CommandContext) {
             await updateResultsFolderSetting(docUri, selectedFolderUri.fsPath);
             const customRootUri = getResultsRootUri(vscode.workspace.getConfiguration('bngl', docUri), docUri);
             vscode.window.showInformationMessage(`Generated results for ${modelFileName} will now be written to ${customRootUri.fsPath}.`);
+            return;
+        }
+
+        const selectedRetentionPolicy = getResultsRetentionPolicyForAction(pick.action);
+        if (selectedRetentionPolicy) {
+            const updatedConfig = await updateResultsRetentionSetting(docUri, selectedRetentionPolicy);
+            const updatedRootUri = getResultsRootUri(updatedConfig, docUri);
+            vscode.window.showInformationMessage(
+                `Results cleanup for ${modelFileName} is now set to ${getResultsRetentionPolicyLabel(selectedRetentionPolicy)}. ${getResultsRetentionPolicyDescription(selectedRetentionPolicy)} Current root: ${updatedRootUri.fsPath}.`
+            );
             return;
         }
     };

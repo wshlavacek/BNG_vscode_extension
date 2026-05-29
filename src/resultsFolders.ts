@@ -1,10 +1,14 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-const GENERATED_RESULTS_RUN_PATTERN = /^\d{4}_\d{2}_\d{2}__\d{2}_\d{2}_\d{2}$/;
+const GENERATED_RESULTS_RUN_PATTERN = /^(\d{4})_(\d{2})_(\d{2})__(\d{2})_(\d{2})_(\d{2})$/;
+const ONE_HOUR_MS = 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * ONE_HOUR_MS;
+const ONE_WEEK_MS = 7 * ONE_DAY_MS;
 
 export type GraphmlVisualizationKind = 'contactmap' | 'regulatory' | 'ruleviz_pattern' | 'ruleviz_operation' | 'ruleviz' | 'other';
 export type StandaloneGraphPaletteKind = Extract<GraphmlVisualizationKind, 'contactmap' | 'regulatory' | 'ruleviz_operation'>;
+export type ResultsRetentionPolicy = 'keep_all' | 'delete_older_than_1h' | 'delete_older_than_1d' | 'delete_older_than_1w' | 'purge_existing';
 
 function isGraphmlFileName(name: string): boolean {
     return path.extname(name).toLowerCase() === '.graphml';
@@ -21,6 +25,60 @@ export function getResultsRootFolderName(filePath: string): string {
 export function getConfiguredResultsBaseFolderPath(config: vscode.WorkspaceConfiguration): string | undefined {
     const configuredPath = config.get<string | null>('general.result_folder');
     return configuredPath && configuredPath.trim().length > 0 ? configuredPath.trim() : undefined;
+}
+
+export function getResultsRetentionPolicy(config: vscode.WorkspaceConfiguration): ResultsRetentionPolicy {
+    const configuredPolicy = config.get<string>('general.results_retention');
+    if (
+        configuredPolicy === 'delete_older_than_1h'
+        || configuredPolicy === 'delete_older_than_1d'
+        || configuredPolicy === 'delete_older_than_1w'
+        || configuredPolicy === 'purge_existing'
+    ) {
+        return configuredPolicy;
+    }
+
+    return 'keep_all';
+}
+
+export function getResultsRetentionPolicyLabel(policy: ResultsRetentionPolicy): string {
+    if (policy === 'purge_existing') {
+        return 'Purge all pre-existing timestamped run folders';
+    }
+
+    if (policy === 'delete_older_than_1h') {
+        return 'Delete timestamped run folders older than 1 hour';
+    }
+
+    if (policy === 'delete_older_than_1d') {
+        return 'Delete timestamped run folders older than 1 day';
+    }
+
+    if (policy === 'delete_older_than_1w') {
+        return 'Delete timestamped run folders older than 1 week';
+    }
+
+    return 'Keep all runs';
+}
+
+export function getResultsRetentionThresholdMs(policy: ResultsRetentionPolicy): number | null {
+    if (policy === 'purge_existing') {
+        return 0;
+    }
+
+    if (policy === 'delete_older_than_1h') {
+        return ONE_HOUR_MS;
+    }
+
+    if (policy === 'delete_older_than_1d') {
+        return ONE_DAY_MS;
+    }
+
+    if (policy === 'delete_older_than_1w') {
+        return ONE_WEEK_MS;
+    }
+
+    return null;
 }
 
 export function getModelFolderUri(fileUri: vscode.Uri): vscode.Uri {
@@ -66,6 +124,50 @@ export function getResultsFolderConfigurationTarget(fileUri: vscode.Uri): vscode
 
 export function isGeneratedResultsRunFolderName(name: string): boolean {
     return GENERATED_RESULTS_RUN_PATTERN.test(name);
+}
+
+export function parseGeneratedResultsRunFolderTimestamp(name: string): number | undefined {
+    const match = name.match(GENERATED_RESULTS_RUN_PATTERN);
+    if (!match) {
+        return undefined;
+    }
+
+    const [, yearText, monthText, dayText, hourText, minuteText, secondText] = match;
+    const year = Number.parseInt(yearText, 10);
+    const month = Number.parseInt(monthText, 10);
+    const day = Number.parseInt(dayText, 10);
+    const hour = Number.parseInt(hourText, 10);
+    const minute = Number.parseInt(minuteText, 10);
+    const second = Number.parseInt(secondText, 10);
+    const parsedDate = new Date(year, month - 1, day, hour, minute, second, 0);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+        return undefined;
+    }
+
+    return parsedDate.getTime();
+}
+
+export function shouldDeleteGeneratedResultsRunFolder(
+    name: string,
+    policy: ResultsRetentionPolicy,
+    now = Date.now()
+): boolean {
+    const thresholdMs = getResultsRetentionThresholdMs(policy);
+    if (thresholdMs === null) {
+        return false;
+    }
+
+    const timestampMs = parseGeneratedResultsRunFolderTimestamp(name);
+    if (typeof timestampMs !== 'number') {
+        return false;
+    }
+
+    if (thresholdMs === 0) {
+        return true;
+    }
+
+    return now - timestampMs > thresholdMs;
 }
 
 export function getGraphmlVisualizationKind(filePath: string): GraphmlVisualizationKind {

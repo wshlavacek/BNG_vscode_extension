@@ -8,9 +8,13 @@ import {
     getGraphmlVisualizationKind,
     getResultsBaseFolderUri,
     getResultsRootFolderName,
+    getResultsRetentionPolicy,
+    getResultsRetentionPolicyLabel,
     getResultsRunFolderUri,
     isGeneratedResultsRunFolderName,
+    parseGeneratedResultsRunFolderTimestamp,
     resolveResultsBaseFolderPath,
+    shouldDeleteGeneratedResultsRunFolder,
     shouldUseStandaloneContactMapPalette,
     shouldUseStandaloneRegulatoryPalette,
     shouldUseStandaloneRulevizLayout,
@@ -27,6 +31,74 @@ suite('Results Folders', () => {
         assert.strictEqual(isGeneratedResultsRunFolderName('2026_05_18__12_34_56'), true);
         assert.strictEqual(isGeneratedResultsRunFolderName('results_nfkb'), false);
         assert.strictEqual(isGeneratedResultsRunFolderName('2026-05-18'), false);
+    });
+
+    test('uses keep_all results retention by default', () => {
+        const fakeConfig = {
+            get: () => null
+        } as unknown as vscode.WorkspaceConfiguration;
+
+        assert.strictEqual(getResultsRetentionPolicy(fakeConfig), 'keep_all');
+        assert.strictEqual(getResultsRetentionPolicyLabel('keep_all'), 'Keep all runs');
+    });
+
+    test('reads configured results retention policies', () => {
+        const fakeConfig = {
+            get: (key: string) => key === 'general.results_retention' ? 'delete_older_than_1d' : null
+        } as unknown as vscode.WorkspaceConfiguration;
+
+        assert.strictEqual(getResultsRetentionPolicy(fakeConfig), 'delete_older_than_1d');
+        assert.strictEqual(
+            getResultsRetentionPolicyLabel('delete_older_than_1h'),
+            'Delete timestamped run folders older than 1 hour'
+        );
+        assert.strictEqual(
+            getResultsRetentionPolicyLabel('delete_older_than_1w'),
+            'Delete timestamped run folders older than 1 week'
+        );
+        assert.strictEqual(
+            getResultsRetentionPolicyLabel('purge_existing'),
+            'Purge all pre-existing timestamped run folders'
+        );
+    });
+
+    test('parses generated results run folder timestamps', () => {
+        const timestampMs = parseGeneratedResultsRunFolderTimestamp('2026_05_18__12_34_56');
+        assert.strictEqual(timestampMs, new Date(2026, 4, 18, 12, 34, 56, 0).getTime());
+        assert.strictEqual(parseGeneratedResultsRunFolderTimestamp('invalid'), undefined);
+    });
+
+    test('identifies stale generated run folders from retention policy', () => {
+        const now = new Date(2026, 4, 19, 13, 0, 0, 0).getTime();
+
+        assert.strictEqual(
+            shouldDeleteGeneratedResultsRunFolder('2026_05_19__11_59_59', 'delete_older_than_1h', now),
+            true
+        );
+        assert.strictEqual(
+            shouldDeleteGeneratedResultsRunFolder('2026_05_19__12_30_01', 'delete_older_than_1h', now),
+            false
+        );
+        assert.strictEqual(
+            shouldDeleteGeneratedResultsRunFolder('2026_05_18__11_59_59', 'delete_older_than_1d', now),
+            true
+        );
+        assert.strictEqual(
+            shouldDeleteGeneratedResultsRunFolder('2026_05_11__12_59_59', 'delete_older_than_1w', now),
+            true
+        );
+        assert.strictEqual(
+            shouldDeleteGeneratedResultsRunFolder('2026_05_16__13_00_01', 'delete_older_than_1w', now),
+            false
+        );
+        assert.strictEqual(
+            shouldDeleteGeneratedResultsRunFolder('2026_05_19__12_30_01', 'purge_existing', now),
+            true
+        );
+        assert.strictEqual(
+            shouldDeleteGeneratedResultsRunFolder('2026_05_19__12_30_01', 'keep_all', now),
+            false
+        );
     });
 
     test('detects standalone contact maps only when no other graphml outputs are present', () => {
