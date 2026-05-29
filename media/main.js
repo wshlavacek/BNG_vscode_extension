@@ -32,7 +32,6 @@
     const VIEW_MODE_DARK = 'dark';
     const REGULATORY_RULE_BNGL_CAPTION_CLASS = 'regulatory-rule-bngl-caption';
     const REGULATORY_RULE_BNGL_HIDDEN_CLASS = 'regulatory-rule-bngl-hidden';
-    const RULEVIZ_BROWSER_RULE_BNGL_HIDDEN_CLASS = 'ruleviz-browser-rule-bngl-hidden';
     const contactMapViewerPalettes = {
         [VIEW_MODE_LIGHT]: {
             background: '#ffffff',
@@ -907,7 +906,7 @@
         return directChildNodes;
     }
 
-    function getRulevizBrowserNodeKind(sourceColor, shape, parentId) {
+    function getRulevizBrowserNodeKind(sourceColor, shape, parentId, parentNodeKind) {
         const normalizedColor = normalizeColorKey(sourceColor);
         const normalizedShape = (shape || '').toLowerCase();
 
@@ -923,7 +922,19 @@
             return 'rule';
         }
 
-        return parentId ? 'component' : 'molecule';
+        if (!parentId || parentNodeKind === 'rule') {
+            return 'molecule';
+        }
+
+        if (parentNodeKind === 'molecule') {
+            return 'component';
+        }
+
+        if (parentNodeKind === 'component') {
+            return 'state';
+        }
+
+        return 'component';
     }
 
     function getRulevizBrowserNodeShape(nodeKind) {
@@ -964,10 +975,15 @@
                         height: 36
                     };
             case 'rule':
-                return {
-                    width: clampNumber((textLength * 9) + 34, 92, 176),
-                    height: 42
-                };
+                return hasDirectChildren
+                    ? {
+                        width: clampNumber((textLength * 10) + 140, 240, 360),
+                        height: 184
+                    }
+                    : {
+                        width: clampNumber((textLength * 9) + 34, 92, 176),
+                        height: 42
+                    };
             case 'operation':
                 return {
                     width: clampNumber((textLength * 8) + 28, 68, 132),
@@ -986,69 +1002,86 @@
         }
     }
 
-    function getRulevizBrowserNodeLabelValign(nodeKind, hasDirectChildren) {
-        if ((nodeKind === 'molecule' || nodeKind === 'component') && hasDirectChildren) {
-            return 'top';
+    function getRulevizBrowserContactMapLabelKind(nodeKind) {
+        switch (nodeKind) {
+            case 'molecule':
+                return 'molecule';
+            case 'component':
+                return 'site';
+            case 'state':
+                return 'state';
+            default:
+                return null;
+        }
+    }
+
+    function getRulevizBrowserNodeLabelValign(nodeKind) {
+        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        if (contactMapLabelKind) {
+            return getContactMapLabelValign(contactMapLabelKind);
         }
 
         return 'center';
     }
 
-    function getRulevizBrowserNodeLabelHalign(nodeKind, hasDirectChildren) {
-        if (nodeKind === 'molecule' && hasDirectChildren) {
-            return 'left';
+    function getRulevizBrowserNodeLabelHalign(nodeKind) {
+        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        if (contactMapLabelKind) {
+            return getContactMapLabelHalign(contactMapLabelKind);
         }
 
         return 'center';
     }
 
-    function getRulevizBrowserNodeLabelJustification(nodeKind, hasDirectChildren) {
-        if (nodeKind === 'molecule' && hasDirectChildren) {
-            return 'left';
+    function getRulevizBrowserNodeLabelJustification(nodeKind) {
+        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        if (contactMapLabelKind) {
+            return getContactMapLabelJustification(contactMapLabelKind);
         }
 
         return 'center';
     }
 
-    function getRulevizBrowserNodeLabelMarginX(nodeKind, hasDirectChildren, displayWidth) {
-        if (nodeKind === 'molecule' && hasDirectChildren) {
-            return -Math.max(0, (displayWidth / 2) - 24);
+    function getRulevizBrowserNodeLabelMarginX(nodeKind, _hasDirectChildren, displayWidth) {
+        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        if (contactMapLabelKind) {
+            return getContactMapLabelMarginX(contactMapLabelKind, displayWidth);
         }
 
         return 0;
     }
 
-    function getRulevizBrowserNodeLabelMarginY(nodeKind, hasDirectChildren, displayHeight) {
-        if ((nodeKind === 'molecule' || nodeKind === 'component') && hasDirectChildren) {
-            return -Math.max(0, (displayHeight / 2) - 18);
+    function getRulevizBrowserNodeLabelMarginY(nodeKind, _hasDirectChildren, displayHeight) {
+        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        if (contactMapLabelKind) {
+            return getContactMapLabelMarginY(contactMapLabelKind, displayHeight);
         }
 
         return 0;
     }
 
     function getRulevizBrowserNodeLabelMaxWidth(nodeKind, hasDirectChildren, displayWidth) {
-        if ((nodeKind === 'molecule' || nodeKind === 'component') && hasDirectChildren) {
-            return Math.max(72, displayWidth - 26);
+        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        if (contactMapLabelKind) {
+            return getContactMapLabelMaxWidth(contactMapLabelKind, displayWidth, hasDirectChildren);
         }
 
         return Math.max(48, displayWidth - 18);
     }
 
-    function getRulevizBrowserNodeLabelBackgroundOpacity(nodeKind, hasDirectChildren) {
-        if ((nodeKind === 'molecule' || nodeKind === 'component') && hasDirectChildren) {
-            return 0.94;
+    function getRulevizBrowserNodeLabelBackgroundOpacity(nodeKind) {
+        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        if (contactMapLabelKind) {
+            return getContactMapLabelBackgroundOpacity(contactMapLabelKind);
         }
 
         return 0;
     }
 
-    function getRulevizBrowserNodeLabelBackgroundPadding(nodeKind, hasDirectChildren) {
-        if (nodeKind === 'molecule' && hasDirectChildren) {
-            return 5;
-        }
-
-        if (nodeKind === 'component' && hasDirectChildren) {
-            return 4;
+    function getRulevizBrowserNodeLabelBackgroundPadding(nodeKind) {
+        const contactMapLabelKind = getRulevizBrowserContactMapLabelKind(nodeKind);
+        if (contactMapLabelKind) {
+            return getContactMapLabelBackgroundPadding(contactMapLabelKind);
         }
 
         return 0;
@@ -1059,12 +1092,16 @@
             return 0;
         }
 
+        if (nodeKind === 'rule') {
+            return 34;
+        }
+
         if (nodeKind === 'molecule') {
-            return 18;
+            return 28;
         }
 
         if (nodeKind === 'component') {
-            return 12;
+            return 14;
         }
 
         return 0;
@@ -1172,15 +1209,8 @@
         const fitButton = document.getElementById('fit_button');
         const exportPngButton = document.getElementById('png_button');
         const exportGraphmlButton = document.getElementById('graphml_button');
+        const toggleRuleBnglButton = document.getElementById('toggle_rule_bngl_button');
         const presetOption = layoutSelect ? layoutSelect.querySelector('option[value="preset"]') : null;
-
-        if (layoutLockButton) {
-            layoutLockButton.hidden = isActive;
-        }
-
-        if (fitButton) {
-            fitButton.hidden = isActive;
-        }
 
         if (exportPngButton) {
             exportPngButton.hidden = isActive;
@@ -1188,6 +1218,11 @@
 
         if (exportGraphmlButton) {
             exportGraphmlButton.hidden = isActive;
+        }
+
+        if (toggleRuleBnglButton) {
+            toggleRuleBnglButton.hidden = isActive;
+            toggleRuleBnglButton.disabled = isActive;
         }
 
         if (layoutSelect) {
@@ -1201,6 +1236,62 @@
         }
     }
 
+    function applyRulevizBrowserFit(options = {}) {
+        if (!isStandaloneRulevizBrowserActive()) {
+            return;
+        }
+
+        const animate = options.animate !== false;
+        const padding = getGraphFitPadding();
+
+        currentRulevizBrowser.cards.forEach((card) => {
+            if (!card || !card.cy) {
+                return;
+            }
+
+            const elementsToFit = card.cy.elements(':visible');
+            if (elementsToFit.length === 0) {
+                return;
+            }
+
+            card.cy.resize();
+            if (!animate) {
+                card.cy.fit(elementsToFit, padding);
+                return;
+            }
+
+            card.cy.animate({
+                fit: {
+                    eles: elementsToFit,
+                    padding: padding
+                },
+                duration: 250
+            });
+        });
+    }
+
+    function applyRulevizBrowserLayoutLock() {
+        if (!isStandaloneRulevizBrowserActive()) {
+            return;
+        }
+
+        currentRulevizBrowser.cards.forEach((card) => {
+            if (!card || !card.cy) {
+                return;
+            }
+
+            card.cy.batch(() => {
+                card.cy.nodes().forEach((node) => {
+                    if (graphLayoutLocked) {
+                        node.lock();
+                    } else {
+                        node.unlock();
+                    }
+                });
+            });
+        });
+    }
+
     function parseRulevizBrowserGraphml(graphmlText) {
         const xmlParser = new DOMParser();
         const xmlDoc = xmlParser.parseFromString(graphmlText, 'text/xml');
@@ -1210,7 +1301,7 @@
         };
         let nodeCount = 0;
 
-        function addRulevizNode(node, parentId) {
+        function addRulevizNode(node, parentId, parentNodeKind) {
             const nodeId = node.getAttribute('id');
             if (!nodeId) {
                 return;
@@ -1239,17 +1330,18 @@
             labelFontSize = Number.isFinite(labelFontSize) && labelFontSize > 0 ? labelFontSize : 12;
 
             const hasDirectChildren = getDirectChildNodeElements(node).length > 0;
-            const nodeKind = getRulevizBrowserNodeKind(backgroundColor, shape, parentId);
+            const nodeKind = getRulevizBrowserNodeKind(backgroundColor, shape, parentId, parentNodeKind);
             const dimensions = getRulevizBrowserNodeDimensions(nodeKind, labelText, hasDirectChildren);
-            const labelValign = getRulevizBrowserNodeLabelValign(nodeKind, hasDirectChildren);
-            const labelHalign = getRulevizBrowserNodeLabelHalign(nodeKind, hasDirectChildren);
-            const labelJustification = getRulevizBrowserNodeLabelJustification(nodeKind, hasDirectChildren);
+            const labelValign = getRulevizBrowserNodeLabelValign(nodeKind);
+            const labelHalign = getRulevizBrowserNodeLabelHalign(nodeKind);
+            const labelJustification = getRulevizBrowserNodeLabelJustification(nodeKind);
             const labelMarginX = getRulevizBrowserNodeLabelMarginX(nodeKind, hasDirectChildren, dimensions.width);
             const labelMarginY = getRulevizBrowserNodeLabelMarginY(nodeKind, hasDirectChildren, dimensions.height);
-            const labelBackgroundOpacity = getRulevizBrowserNodeLabelBackgroundOpacity(nodeKind, hasDirectChildren);
-            const labelBackgroundPadding = getRulevizBrowserNodeLabelBackgroundPadding(nodeKind, hasDirectChildren);
+            const labelBackgroundOpacity = getRulevizBrowserNodeLabelBackgroundOpacity(nodeKind);
+            const labelBackgroundPadding = getRulevizBrowserNodeLabelBackgroundPadding(nodeKind);
             const compoundPadding = getRulevizBrowserCompoundPadding(nodeKind, hasDirectChildren);
             const labelMaxWidth = getRulevizBrowserNodeLabelMaxWidth(nodeKind, hasDirectChildren, dimensions.width);
+            const effectiveLabelText = nodeKind === 'rule' ? '' : labelText;
 
             cytoElements.nodes.push({
                 data: {
@@ -1265,7 +1357,7 @@
                     nodeShape: getRulevizBrowserNodeShape(nodeKind),
                     width: dimensions.width,
                     height: dimensions.height,
-                    labelText: labelText,
+                    labelText: effectiveLabelText,
                     displayLabelBackgroundColor: labelBackgroundOpacity > 0 ? backgroundColor : 'transparent',
                     displayLabelColor: labelColor,
                     labelWeight: nodeKind === 'rule' || (nodeKind === 'molecule' && hasDirectChildren) ? 'bold' : labelWeight,
@@ -1287,26 +1379,26 @@
             nodeCount += 1;
 
             if (node.getAttribute('yfiles.foldertype') === 'group' && hasDirectChildren) {
-                addRulevizChildNodes(node, nodeId);
+                addRulevizChildNodes(node, nodeId, nodeKind);
             }
         }
 
-        function addRulevizChildNodes(root, parentId) {
+        function addRulevizChildNodes(root, parentId, parentNodeKind) {
             Array.from(root.children || []).forEach((element) => {
                 if (element.tagName === 'graph') {
-                    addRulevizChildNodes(element, parentId);
+                    addRulevizChildNodes(element, parentId, parentNodeKind);
                     return;
                 }
 
                 if (element.tagName === 'node') {
-                    addRulevizNode(element, parentId);
+                    addRulevizNode(element, parentId, parentNodeKind);
                 }
             });
         }
 
         const graphmlRoot = xmlDoc.getElementsByTagName('graphml').item(0);
         if (graphmlRoot) {
-            addRulevizChildNodes(graphmlRoot, null);
+            addRulevizChildNodes(graphmlRoot, null, null);
         }
 
         Array.from(xmlDoc.getElementsByTagName('edge')).forEach((edge, index) => {
@@ -1489,13 +1581,14 @@
                         fill,
                         4.5
                     );
+                    const labelBackgroundOpacity = Number(node.data('labelBackgroundOpacity')) || 0;
 
                     node.data('displayBackgroundColor', fill);
                     node.data('displayBorderColor', border);
                     node.data('displayLabelColor', labelColor);
                     node.data(
                         'displayLabelBackgroundColor',
-                        node.isParent() ? fill : 'transparent'
+                        labelBackgroundOpacity > 0 ? fill : 'transparent'
                     );
                 });
 
@@ -1516,10 +1609,10 @@
         }
 
         rulevizBrowser.querySelectorAll('.ruleviz-browser-rule-bngl').forEach((element) => {
-            element.classList.toggle(RULEVIZ_BROWSER_RULE_BNGL_HIDDEN_CLASS, !showRegulatoryRuleBngl);
+            element.hidden = false;
         });
 
-        updateRegulatoryRuleBnglButton(Boolean(currentRulevizBrowser && currentRulevizBrowser.showRuleBnglAvailable));
+        updateRegulatoryRuleBnglButton(false);
     }
 
     function applyRulevizBrowserLayout(layoutName, options = {}) {
@@ -1577,14 +1670,6 @@
         rulevizBrowser.hidden = false;
         rulevizBrowser.innerHTML = '';
 
-        const intro = document.createElement('section');
-        intro.className = 'ruleviz-browser-intro';
-        intro.innerHTML = `
-            <div class="ruleviz-browser-intro-title">${page_title}</div>
-            <div class="ruleviz-browser-intro-subtitle">Standalone RuleViz, one rule per row.</div>
-        `;
-        rulevizBrowser.appendChild(intro);
-
         const table = document.createElement('section');
         table.className = 'ruleviz-browser-table';
         rulevizBrowser.appendChild(table);
@@ -1611,13 +1696,6 @@
                 labelElement.textContent = row.displayLabel;
                 metaElement.appendChild(labelElement);
 
-                if (row.bnglText) {
-                    const bnglElement = document.createElement('pre');
-                    bnglElement.className = 'ruleviz-browser-rule-bngl';
-                    bnglElement.textContent = row.bnglText;
-                    metaElement.appendChild(bnglElement);
-                }
-
                 const graphCell = document.createElement('div');
                 graphCell.className = 'ruleviz-browser-graph-cell';
 
@@ -1632,6 +1710,14 @@
 
                 rowElement.appendChild(metaElement);
                 rowElement.appendChild(graphCell);
+
+                if (row.bnglText) {
+                    const bnglElement = document.createElement('pre');
+                    bnglElement.className = 'ruleviz-browser-rule-bngl';
+                    bnglElement.textContent = row.bnglText;
+                    rowElement.appendChild(bnglElement);
+                }
+
                 table.appendChild(rowElement);
 
                 const cy = cytoscape({
@@ -1739,15 +1825,6 @@
     function updateLayoutLockButton(layoutSelect) {
         const layoutLockButton = document.getElementById('layout_lock_button');
         if (!layoutLockButton) {
-            return;
-        }
-
-        if (isStandaloneRulevizBrowserActive()) {
-            layoutLockButton.hidden = true;
-            if (layoutSelect) {
-                layoutSelect.disabled = false;
-                layoutSelect.title = '';
-            }
             return;
         }
 
@@ -3624,7 +3701,7 @@
                 showInternalStates = true;
                 showRegulatoryRuleBngl = persistedRulevizBrowserViewState.showRegulatoryRuleBngl;
                 currentGraphLayoutName = persistedRulevizBrowserViewState.layoutName || 'breadthfirst';
-                graphLayoutLocked = false;
+                graphLayoutLocked = persistedRulevizBrowserViewState.layoutLocked;
 
                 if (currentCy) {
                     currentCy.destroy();
@@ -3634,7 +3711,8 @@
                 renderRulevizBrowser(message.rows);
 
                 const rulevizLayoutSelect = document.getElementById('layout_select');
-                const rulevizToggleRuleBnglButton = document.getElementById('toggle_rule_bngl_button');
+                const rulevizLayoutLockButton = document.getElementById('layout_lock_button');
+                const rulevizFitButton = document.getElementById('fit_button');
 
                 if (rulevizLayoutSelect) {
                     rulevizLayoutSelect.onchange = function () {
@@ -3642,11 +3720,18 @@
                     };
                 }
 
-                if (rulevizToggleRuleBnglButton) {
-                    rulevizToggleRuleBnglButton.onclick = function () {
-                        showRegulatoryRuleBngl = !showRegulatoryRuleBngl;
-                        applyRulevizBrowserBnglVisibility();
+                if (rulevizLayoutLockButton) {
+                    rulevizLayoutLockButton.onclick = function () {
+                        graphLayoutLocked = !graphLayoutLocked;
+                        applyRulevizBrowserLayoutLock();
+                        updateLayoutLockButton(rulevizLayoutSelect);
                         persistGraphViewState();
+                    };
+                }
+
+                if (rulevizFitButton) {
+                    rulevizFitButton.onclick = function () {
+                        applyRulevizBrowserFit({ animate: true });
                     };
                 }
 
@@ -3661,7 +3746,9 @@
                     }
 
                     applyRulevizBrowserLayout(currentGraphLayoutName, { persist: false });
+                    applyRulevizBrowserLayoutLock();
                     applyRulevizBrowserBnglVisibility();
+                    applyRulevizBrowserFit({ animate: false });
                 });
 
                 break;

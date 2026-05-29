@@ -80,6 +80,16 @@ const SAMPLE_REGULATORY_GRAPHML = `<?xml version="1.0" encoding="UTF-8" standalo
 </graphml>
 `;
 
+const SAMPLE_MODEL_BNGL = [
+    'begin model',
+    'begin reaction rules',
+    'A() <-> B() kf, kr',
+    'namedRule: B() -> C() k2',
+    'end reaction rules',
+    'end model',
+    ''
+].join('\n');
+
 suite('PlotPanel', () => {
     let tmpDir: string;
     let modelPath: string;
@@ -99,30 +109,27 @@ suite('PlotPanel', () => {
 
     setup(async () => {
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bngl-plotpanel-test-'));
-        modelPath = path.join(tmpDir, 'test_model.bngl');
-        fs.writeFileSync(
-            modelPath,
-            [
-                'begin model',
-                'begin reaction rules',
-                'A() <-> B() kf, kr',
-                'namedRule: B() -> C() k2',
-                'end reaction rules',
-                'end model',
-                ''
-            ].join('\n'),
-            'utf8'
-        );
-        graphmlPath = path.join(tmpDir, 'test_contactmap.graphml');
+        const contactMapDir = path.join(tmpDir, 'contactmap');
+        const regulatoryDir = path.join(tmpDir, 'regulatory');
+        const rulevizDir = path.join(tmpDir, 'ruleviz');
+        const splitRulevizDir = path.join(tmpDir, 'ruleviz_split');
+
+        [contactMapDir, regulatoryDir, rulevizDir, splitRulevizDir].forEach((dir) => {
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(path.join(dir, 'test_model.bngl'), SAMPLE_MODEL_BNGL, 'utf8');
+        });
+
+        modelPath = path.join(contactMapDir, 'test_model.bngl');
+        graphmlPath = path.join(contactMapDir, 'test_contactmap.graphml');
         fs.writeFileSync(graphmlPath, SAMPLE_GRAPHML, 'utf8');
-        regulatoryGraphmlPath = path.join(tmpDir, 'test_model_regulatory.graphml');
+        regulatoryGraphmlPath = path.join(regulatoryDir, 'test_model_regulatory.graphml');
         fs.writeFileSync(regulatoryGraphmlPath, SAMPLE_REGULATORY_GRAPHML, 'utf8');
-        rulevizOperationGraphmlPath = path.join(tmpDir, 'test_model_ruleviz_operation.graphml');
+        rulevizOperationGraphmlPath = path.join(rulevizDir, 'test_model_ruleviz_operation.graphml');
         fs.writeFileSync(rulevizOperationGraphmlPath, SAMPLE_GRAPHML, 'utf8');
-        splitRulevizOperationGraphmlPath = path.join(tmpDir, 'test_model_ruleviz_operation__R1.graphml');
+        splitRulevizOperationGraphmlPath = path.join(splitRulevizDir, 'test_model_ruleviz_operation__R1.graphml');
         fs.writeFileSync(splitRulevizOperationGraphmlPath, SAMPLE_GRAPHML, 'utf8');
-        fs.writeFileSync(path.join(tmpDir, 'test_model_ruleviz_operation__reverse__R1.graphml'), SAMPLE_GRAPHML, 'utf8');
-        fs.writeFileSync(path.join(tmpDir, 'test_model_ruleviz_operation_namedRule.graphml'), SAMPLE_GRAPHML, 'utf8');
+        fs.writeFileSync(path.join(splitRulevizDir, 'test_model_ruleviz_operation__reverse__R1.graphml'), SAMPLE_GRAPHML, 'utf8');
+        fs.writeFileSync(path.join(splitRulevizDir, 'test_model_ruleviz_operation_namedRule.graphml'), SAMPLE_GRAPHML, 'utf8');
     });
 
     teardown(async () => {
