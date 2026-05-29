@@ -4,6 +4,7 @@ import { spawnAsync } from '../utils/spawnAsync';
 import { getPythonCommand } from '../utils/getPythonPath';
 import { CommandSpec, appendCommandArgs, createCommandSpec, formatCommandSpec } from '../utils/commandSpec';
 import { ProcessManager } from '../utils/processManagement';
+import { startLogStreaming } from '../utils/logStreaming';
 import { PlotPanel } from '../plotting/PlotPanel';
 import { parseBnglDocument } from '../server/parser';
 import {
@@ -435,9 +436,11 @@ export function createRunHandler(ctx: CommandContext) {
         const runCommand = createBionetgenCommand(pythonCommand, ctx.pybngVersion, ['run', '-i', copy_path.fsPath, '-o', new_fold_uri.fsPath, '-l', new_fold_uri.fsPath]);
         const term_cmd = formatCommandSpec(runCommand);
         ctx.channel.appendLine(`Simulation results folder: ${new_fold_uri.fsPath}`);
+        ctx.channel.appendLine(`Watching ${new_fold_uri.fsPath} for BioNetGen log files.`);
         vscode.window.showInformationMessage(`Started running ${fname} in ${describeRunFolder(new_fold_uri)}`);
 
         if (config.get<boolean>('general.enable_terminal_runner')) {
+            ctx.channel.appendLine('Live BioNetGen log streaming is available only when bngl.general.enable_terminal_runner is disabled.');
             let term = vscode.window.terminals.find(i => i.name === 'bngl_term');
             if (!term) {
                 term = vscode.window.createTerminal('bngl_term');
@@ -454,8 +457,10 @@ export function createRunHandler(ctx: CommandContext) {
             }
         } else {
             ctx.channel.appendLine(term_cmd);
+            const logStream = startLogStreaming(new_fold_uri.fsPath, ctx.channel);
             const process = spawnAsync(runCommand, ctx.channel, ctx.processManager);
-            process.then((exitCode) => {
+            process.then(async (exitCode) => {
+                await logStream.stop();
                 if (exitCode !== 0) {
                     vscode.window.showInformationMessage('Something went wrong, see BNGL output channel for details.');
                     ctx.channel.show();
@@ -467,7 +472,8 @@ export function createRunHandler(ctx: CommandContext) {
                         });
                     }
                 }
-            }).catch((err) => {
+            }).catch(async (err) => {
+                await logStream.stop();
                 ctx.channel.appendLine(`Process execution error: ${err}`);
             });
         }
