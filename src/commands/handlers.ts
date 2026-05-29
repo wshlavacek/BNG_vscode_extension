@@ -322,7 +322,9 @@ async function openVisualizationOutputs(
 
     if (visualizationType === 'ruleviz_operation' || visualizationType === 'ruleviz') {
         const preferredFileName = visualizationType === 'ruleviz'
-            ? matches.find((name) => name.toLowerCase().includes('ruleviz_operation')) ?? matches[0]
+            ? matches.find((name) => name.toLowerCase().includes('ruleviz_pattern'))
+                ?? matches.find((name) => name.toLowerCase().includes('ruleviz_operation'))
+                ?? matches[0]
             : matches[0];
         const graphmlUri = vscode.Uri.joinPath(folderUri, preferredFileName);
         PlotPanel.create(extensionContext.extensionUri, graphmlUri, targetColumn);

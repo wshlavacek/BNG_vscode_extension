@@ -582,7 +582,7 @@ export class PlotPanel {
             }
 
             if ((graphKind === 'ruleviz_operation' || graphKind === 'ruleviz_pattern') && useStandaloneRulevizBrowser && rulevizBrowserViews) {
-                const initialView = graphKind === 'ruleviz_pattern'
+                const initialView: RulevizViewKind = rulevizBrowserViews.pattern
                     ? 'pattern'
                     : 'operation';
                 this._panel.webview.postMessage({

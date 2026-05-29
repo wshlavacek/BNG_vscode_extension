@@ -320,17 +320,17 @@ suite('PlotPanel', () => {
         assert.strictEqual(browserMessage.views.pattern, undefined);
     });
 
-    test('bundles standalone RuleViz operation and pattern outputs into a dual-view browser payload', async function () {
+    test('defaults dual-view standalone RuleViz browser to pattern even when opened from an operation GraphML', async function () {
         this.timeout(15_000);
 
         PlotPanel.create(
             vscode.extensions.getExtension('als251.bngl')!.extensionUri,
-            vscode.Uri.file(splitDualRulevizPatternGraphmlPath),
+            vscode.Uri.file(splitDualRulevizOperationGraphmlPath),
             vscode.ViewColumn.One
         );
 
         const panelWrapper = Array.from(PlotPanel.currentPanels.values())[0] as any;
-        assert.ok(panelWrapper, 'expected a PlotPanel instance for the split RuleViz pattern GraphML files');
+        assert.ok(panelWrapper, 'expected a PlotPanel instance for the dual-view split RuleViz GraphML files');
 
         const panel = panelWrapper._panel as vscode.WebviewPanel;
         const postedMessages: any[] = [];
