@@ -907,6 +907,24 @@ suite('BNGL Parser', () => {
                 d.message.includes('"Gf"') && d.message.includes('never referenced')
             ));
         });
+
+        test('parameter used in a multi-token energy expression is not flagged unused', () => {
+            // The energy is split off at the last whitespace, so the parameter lands in the
+            // pattern half; it must still count as a reference.
+            const text = [
+                'begin parameters',
+                '  Gbond  2.5',
+                'end parameters',
+                'begin energy patterns',
+                '  A(b!1).B(a!1)  Gbond * 0.5',
+                'end energy patterns',
+            ].join('\n');
+
+            const doc = parseBnglDocument(text);
+            assert.ok(!doc.diagnostics.some(d =>
+                d.message.includes('"Gbond"') && d.message.includes('never referenced')
+            ));
+        });
     });
 
     suite('parseBnglDocument — unused parameter referencing another parameter', () => {

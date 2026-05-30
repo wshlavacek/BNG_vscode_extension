@@ -373,9 +373,12 @@ function checkUnusedParameters(doc: BnglDocument): void {
     for (const f of doc.functions) referenceTexts.push(f.body);
     for (const r of doc.rules) referenceTexts.push(r.reactants, r.products, r.rate);
     for (const s of doc.seedSpecies) referenceTexts.push(s.count);
+    for (const o of doc.observables) referenceTexts.push(o.pattern);
     for (const a of doc.actions) referenceTexts.push(a.args);
     for (const c of doc.compartments) referenceTexts.push(c.size);
-    for (const ep of doc.energyPatterns) referenceTexts.push(ep.energy);
+    // include the pattern as well as the energy: a multi-token energy expression leaves the
+    // parameter in the pattern half (the parser splits energy off at the last whitespace)
+    for (const ep of doc.energyPatterns) referenceTexts.push(ep.pattern, ep.energy);
     const allRefs = referenceTexts.join(' ');
 
     for (const param of doc.parameters) {
