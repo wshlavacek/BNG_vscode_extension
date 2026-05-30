@@ -6,13 +6,42 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+### Fixed
+- Process manager refresh timer is now stopped and disposed on extension teardown; previously a self-rescheduling 500 ms poll kept firing for the life of the extension host, even after `deactivate()`
+- `deactivate()` now awaits process cleanup, so the extension host no longer tears down before `killAllProcesses()` finishes and orphans perl/NFsim/run_network children
+- Webview-driven file writes (`_save_image`, `_save_graphml_export`) now reject path-traversal: a crafted save title could previously escape the results folder via `..` and write anywhere
+- `parseDat` transpose is now aligned to the header instead of the first data row, so ragged rows no longer drop or misalign series; short rows pad with empty cells and extra unnamed columns are dropped
+- Unused-parameter detection now counts observable patterns and the pattern half of energy patterns as references, fixing false "never referenced" warnings for parameters used only in those patterns (e.g. a multi-token energy expression like `Gbond * 0.5`)
+- `onReferences` is now comment-aware using the parser's string-aware comment stripping, so a `#` inside a quoted string no longer hides a real reference
+
 ### Changed
-- Added a dedicated `Regulatory Graph` command alongside `Contact Map` and `All Graphs` for generating only the regulatory GraphML output
+- The plot sidebar variable list is now built with `textContent` instead of `innerHTML` for observable names taken from the (untrusted) data-file header — defense-in-depth, since CSP already blocked inline script execution
+
+### Removed
+- Dead operation-only RuleViz scaffolding (`bng.run_ruleviz_operation` and its `ruleviz_operation` command path), superseded by the unified RuleViz browser; the live `ruleviz_operation` visualize-action and GraphML-classification usages are unchanged
+
+## [0.8.3] - 2026-05-29
+
+### Added
+- Standalone RuleViz browser (`BNG: Visualize RuleViz`) with a pattern/operation toggle that renders rule visualizations in a built-in viewer instead of relying on external GraphML output
+- `BNG: Visualize Regulatory Graph` command alongside `Contact Map` and `All Graphs` for generating only the regulatory GraphML output
+- `BNG: Close Generated Tabs` command (`bng.close_generated_artifacts`) to close generated result, plot, and graph tabs in one action
+- `BNG: Manage Active Jobs` command (`bng.manage_processes`) for inspecting and stopping running BioNetGen jobs
+- `bngl.general.results_retention` setting with folder-based cleanup policies for timestamped `results_<model>/` run folders (`keep_all`, `purge_existing`, `delete_older_than_1w/1d/1h`); cleanup applies before future runs and skips active jobs
+
+### Changed
+- Plot viewer and job management UX improvements across the sidebar and process tools
+- Simulation logs now stream to the BNGL output channel during runs instead of only appearing after completion
+- Standalone RuleViz now defaults to the pattern view, uses unified panel titles, and has refined styling (wildcard bond modifiers, layout parity with the other viewers)
 - Standalone regulatory-graph views now use their own custom day/night palette instead of reusing the contact-map colors
 - Regulatory graph process nodes now recover compact rule labels from the sibling BNGL model when BioNetGen emits blank oval labels
 - Standalone Contact Map exports in light mode now render against a white canvas so the tan molecule boxes separate more clearly
 - GraphML saves from the built-in viewer now preserve the current node layout, and the toolbar buttons use clearer `Save ...` wording to match their behavior
 - Graph-view toolbar buttons now use a unified palette in each viewer mode, with light blue buttons in Day View and tan buttons in Night View
+
+### Fixed
+- `BNG: Close Generated Tabs` now reliably closes the generated tabs it targets
+- Plot summary series label now reflects the correct series
 
 ## [0.8.2] - 2026-05-19
 
