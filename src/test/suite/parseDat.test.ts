@@ -71,6 +71,35 @@ suite('parseDat', () => {
         assert.deepStrictEqual(data[1], ['1', '2']);
     });
 
+    test('pads ragged short rows with empty strings instead of undefined', () => {
+        const text = [
+            '# time A B',
+            '0 1 2',
+            '1 3',       // missing B value
+        ].join('\n');
+
+        const [names, data] = parseDat(text);
+        assert.deepStrictEqual(names, ['time', 'A', 'B']);
+        assert.strictEqual(data.length, 3); // one column per header name
+        assert.deepStrictEqual(data[0], ['0', '1']); // time
+        assert.deepStrictEqual(data[1], ['1', '3']); // A
+        assert.deepStrictEqual(data[2], ['2', '']);  // B: missing cell becomes ''
+    });
+
+    test('drops trailing columns that have no header name', () => {
+        const text = [
+            '# time A',
+            '0 1 99', // extra unnamed column
+            '1 2 98',
+        ].join('\n');
+
+        const [names, data] = parseDat(text);
+        assert.deepStrictEqual(names, ['time', 'A']);
+        assert.strictEqual(data.length, 2); // aligned to the header, extra column dropped
+        assert.deepStrictEqual(data[0], ['0', '1']);
+        assert.deepStrictEqual(data[1], ['1', '2']);
+    });
+
     test('parses a real .gdat snippet', () => {
         const text = [
             '#          time    Atot        Btot',

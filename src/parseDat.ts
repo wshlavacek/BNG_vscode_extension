@@ -16,6 +16,8 @@ export function parseDat(text: string): [string[], string[][]] {
     if (data.length === 0) {
         return [names, []];
     }
-    const transposed = data[0].map((_, colIndex) => data.map(row => row[colIndex]));
+    // Build one column per header name so series names and data stay aligned even when a
+    // row is ragged: short rows get '' for missing cells, extra unnamed columns are dropped.
+    const transposed = names.map((_, colIndex) => data.map(row => row[colIndex] ?? ''));
     return [names, transposed];
 }
