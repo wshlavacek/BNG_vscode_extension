@@ -4854,11 +4854,25 @@
                     // Add to sidebar
                     const item = document.createElement('div');
                     item.className = 'var-item';
-                    item.innerHTML = `
-                        <input type="checkbox" id="var-${i}" ${is_visible ? 'checked' : ''}>
-                        <span style="color: ${color}; font-weight: bold;">—</span>
-                        <label for="var-${i}">${message.names[i]}</label>
-                    `;
+
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.id = `var-${i}`;
+                    checkbox.checked = is_visible;
+
+                    const swatch = document.createElement('span');
+                    swatch.style.color = color;
+                    swatch.style.fontWeight = 'bold';
+                    swatch.textContent = '—';
+
+                    const label = document.createElement('label');
+                    label.htmlFor = `var-${i}`;
+                    // observable names come from the data file header (untrusted); use textContent, not innerHTML
+                    label.textContent = message.names[i];
+
+                    item.appendChild(checkbox);
+                    item.appendChild(swatch);
+                    item.appendChild(label);
                     item.onclick = (e) => {
                         if (e.target.tagName !== 'INPUT') {
                             const cb = item.querySelector('input');
