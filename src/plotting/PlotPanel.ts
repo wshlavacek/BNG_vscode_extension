@@ -19,6 +19,25 @@ function escapeHtml(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// Resolve a destination URI for a webview-provided filename, rejecting path traversal
+// (separators, `.`/`..`, absolute paths) so a malicious title cannot escape `folder`.
+export function resolveSafeOutputUri(folder: vscode.Uri, fileName: string): vscode.Uri | undefined {
+    if (typeof fileName !== 'string' || fileName.length === 0) {
+        return undefined;
+    }
+    // a legitimate output filename is a single path segment, not a traversal token
+    if (fileName !== path.basename(fileName) || fileName === '.' || fileName === '..') {
+        return undefined;
+    }
+    const uri = vscode.Uri.joinPath(folder, fileName);
+    // defense-in-depth: confirm the resolved path stays under the target folder
+    const relative = path.relative(folder.fsPath, uri.fsPath);
+    if (relative.length === 0 || relative.startsWith('..') || path.isAbsolute(relative)) {
+        return undefined;
+    }
+    return uri;
+}
+
 function getCanonicalRulevizBrowserBaseName(filePath: string): string | undefined {
     const extension = path.extname(filePath).toLowerCase();
     if (extension !== '.graphml') {
@@ -649,7 +668,11 @@ export class PlotPanel {
         const folder = vscode.Uri.file(message.folder);
         const suffix = message.suffix ? `_${message.suffix}` : '';
         const ext = message.type === 'png' ? 'png' : 'svg';
-        const uri = vscode.Uri.joinPath(folder, `${message.title}${suffix}.${ext}`);
+        const uri = resolveSafeOutputUri(folder, `${message.title}${suffix}.${ext}`);
+        if (!uri) {
+            vscode.window.showErrorMessage('Invalid image file name.');
+            return;
+        }
         let data: Buffer;
         if (message.type === 'png') {
             const prefix = 'data:image/png;base64,';
@@ -660,7 +683,13 @@ export class PlotPanel {
             data = Buffer.from(message.text.slice(prefix.length), 'base64');
         } else {
             const prefix = 'data:image/svg+xml,';
-            const decoded = decodeURIComponent(message.text);
+            let decoded: string;
+            try {
+                decoded = decodeURIComponent(message.text);
+            } catch {
+                vscode.window.showErrorMessage('Invalid SVG data URI.');
+                return;
+            }
             if (!decoded.startsWith(prefix)) {
                 vscode.window.showErrorMessage('Invalid SVG data URI.');
                 return;
@@ -676,17 +705,21 @@ export class PlotPanel {
 
     private _save_graphml_export(message: any) {
         const folder = vscode.Uri.file(message.folder);
-        const files = Array.isArray(message.files)
-            ? message.files
-                .filter((file: any) => typeof file?.title === 'string' && typeof file?.text === 'string')
-                .map((file: any) => ({
-                    uri: vscode.Uri.joinPath(folder, `${file.title}.graphml`),
-                    data: Buffer.from(file.text, 'utf8')
-                }))
-            : null;
+        const candidates = Array.isArray(message.files)
+            ? message.files.filter((file: any) => typeof file?.title === 'string' && typeof file?.text === 'string')
+            : [];
 
-        if (files && files.length > 0) {
-            Promise.all(files.map((file: { uri: vscode.Uri, data: Buffer }) => vscode.workspace.fs.writeFile(file.uri, file.data))).then(() => {
+        if (candidates.length > 0) {
+            const files: { uri: vscode.Uri, data: Buffer }[] = [];
+            for (const file of candidates) {
+                const uri = resolveSafeOutputUri(folder, `${file.title}.graphml`);
+                if (!uri) {
+                    vscode.window.showErrorMessage('Invalid GraphML file name.');
+                    return;
+                }
+                files.push({ uri, data: Buffer.from(file.text, 'utf8') });
+            }
+            Promise.all(files.map((file) => vscode.workspace.fs.writeFile(file.uri, file.data))).then(() => {
                 const messageText = files.length === 1
                     ? `GraphML saved to ${files[0].uri.fsPath}`
                     : `${files.length} GraphML files saved to ${folder.fsPath}`;
@@ -697,7 +730,11 @@ export class PlotPanel {
             return;
         }
 
-        const uri = vscode.Uri.joinPath(folder, `${message.title}.graphml`);
+        const uri = resolveSafeOutputUri(folder, `${message.title}.graphml`);
+        if (!uri) {
+            vscode.window.showErrorMessage('Invalid GraphML file name.');
+            return;
+        }
         const data = Buffer.from(message.text, 'utf8');
 
         vscode.workspace.fs.writeFile(uri, data).then(() => {

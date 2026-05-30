@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { PlotPanel } from '../../plotting/PlotPanel';
+import { PlotPanel, resolveSafeOutputUri } from '../../plotting/PlotPanel';
 
 const SAMPLE_GRAPHML = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:y="http://www.yworks.com/xml/graphml">
@@ -418,5 +418,28 @@ suite('PlotPanel', () => {
         assert.strictEqual(browserMessage.views.pattern.rows[1].bnglText, 'A() <-> B() kf, kr');
         assert.strictEqual(browserMessage.views.pattern.rows[2].displayLabel, 'namedRule');
         assert.strictEqual(browserMessage.views.pattern.rows[2].bnglText, 'namedRule: B() -> C() k2');
+    });
+});
+
+suite('resolveSafeOutputUri', () => {
+    const folder = vscode.Uri.file(path.join(os.tmpdir(), 'bngl-output'));
+
+    test('accepts a plain filename and keeps it under the folder', () => {
+        const uri = resolveSafeOutputUri(folder, 'figure.png');
+        assert.ok(uri, 'expected a plain filename to resolve');
+        assert.strictEqual(uri!.fsPath, path.join(folder.fsPath, 'figure.png'));
+    });
+
+    test('rejects parent-directory traversal in the filename', () => {
+        assert.strictEqual(resolveSafeOutputUri(folder, '../escape.png'), undefined);
+        assert.strictEqual(resolveSafeOutputUri(folder, '../../etc/passwd'), undefined);
+    });
+
+    test('rejects path separators, absolute paths, and traversal tokens', () => {
+        assert.strictEqual(resolveSafeOutputUri(folder, 'sub/figure.png'), undefined);
+        assert.strictEqual(resolveSafeOutputUri(folder, path.join(os.tmpdir(), 'abs.png')), undefined);
+        assert.strictEqual(resolveSafeOutputUri(folder, '..'), undefined);
+        assert.strictEqual(resolveSafeOutputUri(folder, '.'), undefined);
+        assert.strictEqual(resolveSafeOutputUri(folder, ''), undefined);
     });
 });
