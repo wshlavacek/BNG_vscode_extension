@@ -286,6 +286,12 @@ export class ProcessManager {
 
             // windows
             if (process.platform === "win32") {
+                // NOTE: This enumeration is fragile and unverified on Windows: '|' and the comma-joined
+                // property list are passed as discrete argv under {shell}, and Select-Object's
+                // width-formatted table output can wrap/truncate columns, which the whitespace split in
+                // the 'close' handler below assumes it never does. Prefer machine-readable output (e.g.
+                // Get-CimInstance | ConvertTo-Csv) once it can be validated on a real Windows host.
+                // Tracked upstream: RuleWorld/BNG_vscode_extension#31
                 util = cp.spawn('Get-WmiObject', ['Win32_Process', '|', 'Select-Object', 'ProcessID, ParentProcessId, Name'], {'shell':'powershell.exe'});
             }
             // mac & linux
