@@ -4,7 +4,7 @@ import { LanguageClient, LanguageClientOptions, ServerOptions, TransportKind } f
 import { ProcessManager, ProcessManagerProvider, TrackedProcessObject } from './utils/processManagement';
 import { getGeneratedArtifactTabs } from './utils/generatedArtifacts';
 import { PlotPanel } from './plotting/PlotPanel';
-import { createRunHandler, createVizHandler, createContactMapHandler, createRegulatoryGraphHandler, createRulevizHandler, createRulevizOperationHandler, createResultsFolderHandler, createSetupHandler, createUpgradeHandler, CommandContext } from './commands/handlers';
+import { createRunHandler, createVizHandler, createContactMapHandler, createRegulatoryGraphHandler, createRulevizHandler, createResultsFolderHandler, createSetupHandler, createUpgradeHandler, CommandContext } from './commands/handlers';
 import { menuCommandHandler } from './commands/menu';
 import { bnglFoldingProvider } from './folding/foldingProvider';
 
@@ -108,7 +108,6 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.commands.registerCommand('bng.run_contactmap', createContactMapHandler(ctx)),
 			vscode.commands.registerCommand('bng.run_regulatory', createRegulatoryGraphHandler(ctx)),
 			vscode.commands.registerCommand('bng.run_ruleviz', createRulevizHandler(ctx)),
-			vscode.commands.registerCommand('bng.run_ruleviz_operation', createRulevizOperationHandler(ctx)),
 		vscode.commands.registerCommand('bng.run_viz', createVizHandler(ctx)),
 		vscode.commands.registerCommand('bng.results_folder', createResultsFolderHandler(ctx)),
 		vscode.commands.registerCommand('bng.webview', () => PlotPanel.create(context.extensionUri)),

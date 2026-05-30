@@ -2,7 +2,6 @@ import * as assert from 'assert';
 import {
     createStandaloneRegulatoryInputText,
     createStandaloneRulevizInputText,
-    createStandaloneRulevizOperationInputText,
     getAutoOpenPlotOutputFileNames
 } from '../../commands/handlers';
 
@@ -48,26 +47,6 @@ suite('Visualization Handlers', () => {
         assert.strictEqual(result.includes('simulate({method=>"ode"})'), false);
         assert.strictEqual(result.includes('visualize({type=>"contactmap"})'), false);
         assert.match(result, /end model\n\nvisualize\(\{type=>"regulatory",ruleNames=>1\}\)\n$/);
-    });
-
-    test('replaces top-level actions with a standalone RuleViz each=>1 action', () => {
-        const source = [
-            'begin model',
-            'begin parameters',
-            '  k 1',
-            'end parameters',
-            'end model',
-            '',
-            'simulate({method=>"ssa"})',
-            'visualize({type=>"ruleviz_operation"})',
-            ''
-        ].join('\n');
-
-        const result = createStandaloneRulevizOperationInputText(source);
-
-        assert.strictEqual(result.includes('simulate({method=>"ssa"})'), false);
-        assert.strictEqual(result.includes('visualize({type=>"ruleviz_operation"})'), false);
-        assert.match(result, /visualize\(\{type=>"ruleviz_operation",each=>1\}\)\n$/);
     });
 
     test('appends both standalone RuleViz views for the unified RuleViz feature', () => {

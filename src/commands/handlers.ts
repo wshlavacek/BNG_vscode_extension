@@ -27,7 +27,7 @@ export interface CommandContext {
     extensionContext: vscode.ExtensionContext;
 }
 
-export type VisualizationType = 'all' | 'contactmap' | 'regulatory' | 'ruleviz' | 'ruleviz_operation';
+export type VisualizationType = 'all' | 'contactmap' | 'regulatory' | 'ruleviz';
 type ResultsFolderAction = 'default' | 'workspace' | 'choose' | 'retention_keep_all' | 'retention_1h' | 'retention_1d' | 'retention_1w' | 'retention_purge';
 
 interface ResultsFolderMenuItem extends vscode.QuickPickItem {
@@ -347,7 +347,7 @@ function getVisualizationCommandLabel(visualizationType: VisualizationType): str
         return 'regulatory graph';
     }
 
-    if (visualizationType === 'ruleviz' || visualizationType === 'ruleviz_operation') {
+    if (visualizationType === 'ruleviz') {
         return 'RuleViz';
     }
 
@@ -585,10 +585,6 @@ function getVisualizationOutputMatcher(visualizationType: VisualizationType) {
         return (name: string) => name.toLowerCase().endsWith('_regulatory.graphml') || name.toLowerCase().includes('regulatory');
     }
 
-    if (visualizationType === 'ruleviz_operation') {
-        return (name: string) => name.toLowerCase().endsWith('_ruleviz_operation.graphml') || name.toLowerCase().includes('ruleviz_operation');
-    }
-
     if (visualizationType === 'ruleviz') {
         return (name: string) => {
             const normalizedName = name.toLowerCase();
@@ -639,10 +635,6 @@ export function createStandaloneRegulatoryInputText(sourceText: string): string 
     return createStandaloneVisualizationInputText(sourceText, STANDALONE_REGULATORY_VISUALIZE_ACTION);
 }
 
-export function createStandaloneRulevizOperationInputText(sourceText: string): string {
-    return createStandaloneVisualizationInputText(sourceText, STANDALONE_RULEVIZ_OPERATION_VISUALIZE_ACTION);
-}
-
 export function createStandaloneRulevizInputText(sourceText: string): string {
     return createStandaloneVisualizationInputText(sourceText, [
         STANDALONE_RULEVIZ_PATTERN_VISUALIZE_ACTION,
@@ -668,12 +660,10 @@ async function openVisualizationOutputs(
         return;
     }
 
-    if (visualizationType === 'ruleviz_operation' || visualizationType === 'ruleviz') {
-        const preferredFileName = visualizationType === 'ruleviz'
-            ? matches.find((name) => name.toLowerCase().includes('ruleviz_pattern'))
-                ?? matches.find((name) => name.toLowerCase().includes('ruleviz_operation'))
-                ?? matches[0]
-            : matches[0];
+    if (visualizationType === 'ruleviz') {
+        const preferredFileName = matches.find((name) => name.toLowerCase().includes('ruleviz_pattern'))
+            ?? matches.find((name) => name.toLowerCase().includes('ruleviz_operation'))
+            ?? matches[0];
         const graphmlUri = vscode.Uri.joinPath(folderUri, preferredFileName);
         PlotPanel.create(extensionContext.extensionUri, graphmlUri, targetColumn);
         return;
@@ -698,7 +688,7 @@ function createVisualizationHandler(ctx: CommandContext, visualizationType: Visu
         const new_fold_uri = await prepareResultsRunFolder(ctx, config, docUri, fold_name);
         const copy_path = vscode.Uri.joinPath(new_fold_uri, fname);
 
-        if (visualizationType === 'regulatory' || visualizationType === 'ruleviz' || visualizationType === 'ruleviz_operation') {
+        if (visualizationType === 'regulatory' || visualizationType === 'ruleviz') {
             const sourceBytes = await vscode.workspace.fs.readFile(editor.document.uri);
             const sourceText = Buffer.from(sourceBytes).toString('utf8');
             const standaloneVisualizationInputText = visualizationType === 'regulatory'
@@ -710,7 +700,7 @@ function createVisualizationHandler(ctx: CommandContext, visualizationType: Visu
         }
 
         const pythonCommand = await getPythonCommand(ctx.channel);
-        const vizCommand = visualizationType === 'regulatory' || visualizationType === 'ruleviz' || visualizationType === 'ruleviz_operation'
+        const vizCommand = visualizationType === 'regulatory' || visualizationType === 'ruleviz'
             ? createBionetgenCommand(pythonCommand, ctx.pybngVersion, [
                 'run',
                 '-i',
@@ -905,10 +895,6 @@ export function createRegulatoryGraphHandler(ctx: CommandContext) {
 
 export function createRulevizHandler(ctx: CommandContext) {
     return createVisualizationHandler(ctx, 'ruleviz');
-}
-
-export function createRulevizOperationHandler(ctx: CommandContext) {
-    return createRulevizHandler(ctx);
 }
 
 export function createResultsFolderHandler(ctx: CommandContext) {
