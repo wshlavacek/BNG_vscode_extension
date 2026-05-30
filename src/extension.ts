@@ -236,6 +236,7 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 }
 
-export function deactivate() {
-	vscode.commands.executeCommand('bng.process_cleanup');
+export function deactivate(): Thenable<unknown> | undefined {
+	// return the thenable so the extension host waits for child-process cleanup before shutdown
+	return vscode.commands.executeCommand('bng.process_cleanup');
 }
