@@ -18,7 +18,7 @@ import {
     InsertTextFormat,
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { parseBnglDocument, BnglDocument, BnglDiagnostic } from './parser';
+import { parseBnglDocument, BnglDocument, BnglDiagnostic, stripComment } from './parser';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -220,6 +220,8 @@ for (const r of RATE_LAW_TYPES) {
 // ── Completion ──────────────────────────────────────────────────────
 
 function getEnclosingBlockType(doc: BnglDocument, line: number): string | null {
+    // doc.blocks is ordered by close ("end") time, so for nested blocks the innermost closes
+    // first and is matched here before any enclosing block (e.g. the surrounding "model" wrapper).
     for (const block of doc.blocks) {
         if (line > block.startLine && (block.endLine === -1 || line < block.endLine)) {
             if (block.type !== 'model') return block.type;
@@ -459,12 +461,13 @@ connection.onReferences((params: ReferenceParams): Location[] => {
     const regex = new RegExp(`\\b${wordInfo.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
 
     for (let i = 0; i < lines.length; i++) {
+        // string-aware comment boundary (ignores '#' inside quoted strings), matching the parser
+        const codeLength = stripComment(lines[i]).length;
         let match;
         regex.lastIndex = 0;
         while ((match = regex.exec(lines[i])) !== null) {
-            // Skip if this is inside a comment
-            const hashIdx = lines[i].indexOf('#');
-            if (hashIdx >= 0 && match.index >= hashIdx) continue;
+            // Skip if this match falls inside a comment
+            if (match.index >= codeLength) continue;
 
             // Include the definition if requested
             if (i === def.line && !params.context.includeDeclaration) continue;

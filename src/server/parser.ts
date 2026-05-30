@@ -396,7 +396,7 @@ function checkUnusedParameters(doc: BnglDocument): void {
 
 // ── Line parsers for each block type ────────────────────────────────
 
-function stripComment(line: string): string {
+export function stripComment(line: string): string {
     // Strip # comments, respecting double-quoted strings
     let inString = false;
     for (let i = 0; i < line.length; i++) {
@@ -554,6 +554,10 @@ function parseRuleLine(trimmed: string, line: number, doc: BnglDocument): void {
         }
 
         if (parts.length >= 2) {
+            // Heuristic: rate is the last whitespace-delimited token, so a multi-token rate
+            // expression (e.g. "k1 * 2") leaves its leading tokens in `products`. This is fine
+            // for the unused-parameter scan, which scans reactants + products + rate together;
+            // do not rely on `rate` alone as a precise rate expression.
             const rate = parts[parts.length - 1];
             const products = parts.slice(0, -1).join(' ');
             doc.rules.push({ label, reactants: arrowMatch[1].trim(), products, rate, sourceText, line });
