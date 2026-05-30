@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { ProcessManager } from '../../utils/processManagement';
+import { ProcessManager, ProcessManagerProvider } from '../../utils/processManagement';
 
 suite('Process Manager', () => {
     test('tracks simulation metadata and finds active runs by model path', () => {
@@ -44,5 +44,31 @@ suite('Process Manager', () => {
 
         assert.strictEqual(processManager.countTrackedProcesses(), 0);
         assert.strictEqual(processManager.findTrackedProcessByModel('/tmp/model_c.bngl', 'simulation'), undefined);
+    });
+});
+
+suite('Process Manager Provider', () => {
+    // expose the private refresh-timer handle without firing the 500 ms timer during the test
+    const refreshTimerOf = (provider: ProcessManagerProvider) =>
+        (provider as unknown as { _refreshTimer?: ReturnType<typeof setTimeout> })._refreshTimer;
+
+    test('dispose cancels the refresh loop and blocks re-arming', () => {
+        const processManager = new ProcessManager();
+        const provider = new ProcessManagerProvider(processManager);
+
+        // constructor arms the self-rescheduling timer
+        assert.ok(refreshTimerOf(provider), 'expected the constructor to arm a refresh timer');
+
+        provider.dispose();
+
+        // dispose clears the pending timer ...
+        assert.strictEqual(refreshTimerOf(provider), undefined, 'dispose should clear the pending timer');
+
+        // ... and the disposed guard stops refresh() from scheduling a new one
+        provider.refresh();
+        assert.strictEqual(refreshTimerOf(provider), undefined, 'refresh() after dispose should not re-arm');
+
+        // dispose is idempotent
+        assert.doesNotThrow(() => provider.dispose());
     });
 });

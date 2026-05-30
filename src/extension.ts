@@ -215,10 +215,11 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	// Process manager tree view
+	const processManagerProvider = new ProcessManagerProvider(processManager);
 	const treeView = vscode.window.createTreeView('processManagerTreeView', {
-		treeDataProvider: new ProcessManagerProvider(processManager),
+		treeDataProvider: processManagerProvider,
 	});
-	context.subscriptions.push(treeView);
+	context.subscriptions.push(processManagerProvider, treeView);
 	vscode.commands.executeCommand('setContext', 'bng.processManagerActive', true);
 	updateActiveJobsStatus();
 

@@ -30,12 +30,16 @@ interface UntrackedProcessObject {
 }
 
 // tree data provider for tree view
-export class ProcessManagerProvider implements vscode.TreeDataProvider<TrackedProcessObject> {
+export class ProcessManagerProvider implements vscode.TreeDataProvider<TrackedProcessObject>, vscode.Disposable {
     private _processManager: ProcessManager;
 
     // for refresh
     private _onDidChangeTreeData: vscode.EventEmitter<TrackedProcessObject | undefined | null | void> = new vscode.EventEmitter<TrackedProcessObject | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<TrackedProcessObject | undefined | null | void> = this._onDidChangeTreeData.event;
+
+    // self-rescheduling refresh timer; cleared on dispose so it stops with the extension host
+    private _refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    private _disposed = false;
 
     constructor(processManager: ProcessManager) {
         this._processManager = processManager;
@@ -67,13 +71,26 @@ export class ProcessManagerProvider implements vscode.TreeDataProvider<TrackedPr
     }
 
     refresh() {
-        setTimeout(async () => {
+        if (this._disposed) {
+            return;
+        }
+        this._refreshTimer = setTimeout(async () => {
             if (this._processManager.hasTrackedProcesses) {
                 await this._processManager.refresh();
                 this._onDidChangeTreeData.fire();
             }
+            // an in-flight callback can resolve after dispose(); the guard in refresh() stops the re-arm
             this.refresh();
         }, refreshInterval);
+    }
+
+    dispose() {
+        this._disposed = true;
+        if (this._refreshTimer) {
+            clearTimeout(this._refreshTimer);
+            this._refreshTimer = undefined;
+        }
+        this._onDidChangeTreeData.dispose();
     }
 }
 
