@@ -48,6 +48,10 @@ const PLOT_OUTPUT_EXTENSION_PRIORITY = new Map([
 ]);
 
 function getTimestampedFolderName(): string {
+    // Second-resolution local time. The YYYY_MM_DD__HH_MM_SS format must be preserved: the
+    // retention pruning in resultsFolders.ts matches exactly that pattern, so adding sub-second
+    // precision here without updating that matcher would break pruning. Two runs within the same
+    // second therefore share a run folder (createDirectory is idempotent).
     const d = new Date();
     return `${d.getFullYear()}_${(d.getMonth() + 1).toString().padStart(2, '0')}_${d.getDate().toString().padStart(2, '0')}__${d.getHours().toString().padStart(2, '0')}_${d.getMinutes().toString().padStart(2, '0')}_${d.getSeconds().toString().padStart(2, '0')}`;
 }
@@ -822,10 +826,9 @@ export function createRunHandler(ctx: CommandContext) {
                     startedAt: Date.now()
                 },
                 onSpawn: (_process, pid) => {
+                    // onSpawn fires synchronously during cp.spawn, before the withProgress
+                    // cancellation token is registered, so cancellation is handled there, not here.
                     spawnedPid = pid;
-                    if (cancellationRequested && pid) {
-                        void ctx.processManager.killProcessByPid(pid);
-                    }
                 }
             });
 

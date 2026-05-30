@@ -105,9 +105,9 @@ export function activate(context: vscode.ExtensionContext) {
 	// Register commands
 	context.subscriptions.push(
 		vscode.commands.registerCommand('bng.run_bngl', createRunHandler(ctx)),
-			vscode.commands.registerCommand('bng.run_contactmap', createContactMapHandler(ctx)),
-			vscode.commands.registerCommand('bng.run_regulatory', createRegulatoryGraphHandler(ctx)),
-			vscode.commands.registerCommand('bng.run_ruleviz', createRulevizHandler(ctx)),
+		vscode.commands.registerCommand('bng.run_contactmap', createContactMapHandler(ctx)),
+		vscode.commands.registerCommand('bng.run_regulatory', createRegulatoryGraphHandler(ctx)),
+		vscode.commands.registerCommand('bng.run_ruleviz', createRulevizHandler(ctx)),
 		vscode.commands.registerCommand('bng.run_viz', createVizHandler(ctx)),
 		vscode.commands.registerCommand('bng.results_folder', createResultsFolderHandler(ctx)),
 		vscode.commands.registerCommand('bng.webview', () => PlotPanel.create(context.extensionUri)),
