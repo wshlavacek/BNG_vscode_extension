@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/bionetgen-vscode-readme-card.png" alt="BioNetGen VS Code Extension" />
+</p>
+
 [![Documentation Status](https://readthedocs.org/projects/bng-vs-code-extension/badge/?version=latest)](https://bng-vs-code-extension.readthedocs.io/en/latest/?badge=latest)
 
 # BioNetGen (BNG) VS Code Extension
